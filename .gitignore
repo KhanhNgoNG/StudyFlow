@@ -1,0 +1,32 @@
+# Editors and operating systems
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Android / Gradle
+.gradle/
+.kotlin/
+**/build/
+local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+captures/
+.cxx/
+.externalNativeBuild/
+
+# Node.js and secrets
+node_modules/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+
+# Runtime database files
+/server/storage/
+*.db-wal
+*.db-shm

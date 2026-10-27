@@ -1,0 +1,7 @@
+{
+  "name": "studyflow-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "StudyFlow backend scaffold",
+  "type": "module"
+}

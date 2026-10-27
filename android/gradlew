@@ -1,0 +1,4 @@
+#!/bin/sh
+# Bootstrap placeholder. Replace with the generated Gradle Wrapper.
+printf '%s\n' 'Gradle Wrapper is not configured. See docs/setup.md.' >&2
+exit 1

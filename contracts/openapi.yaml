@@ -1,0 +1,6 @@
+openapi: 3.0.3
+info:
+  title: StudyFlow API
+  version: 0.1.0
+  description: Initial scaffold. API endpoints and schemas are not defined yet.
+paths: {}
