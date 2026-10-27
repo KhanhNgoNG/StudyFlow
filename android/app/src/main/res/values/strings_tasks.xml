@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tasks_search">Tìm công việc</string>
+    <string name="tasks_clear_query">Xóa truy vấn tìm kiếm</string>
+    <string name="tasks_filter_all">Tất cả</string>
+    <string name="tasks_filter_incomplete">Chưa xong</string>
+    <string name="tasks_filter_completed">Hoàn thành</string>
+    <string name="tasks_demo_notice">Dữ liệu mẫu · Nhãn đồng bộ chỉ để minh họa</string>
+    <string name="tasks_empty_title">Chưa có công việc</string>
+    <string name="tasks_empty_body">Các công việc học tập sẽ xuất hiện tại đây. Chức năng thêm công việc sẽ được bổ sung.</string>
+    <string name="tasks_no_results_title">Không tìm thấy công việc</string>
+    <string name="tasks_no_results_body">Thử từ khóa khác hoặc xóa điều kiện tìm kiếm và lọc để xem lại danh sách.</string>
+    <string name="tasks_clear_conditions">Xóa tìm kiếm và bộ lọc</string>
+    <string name="task_mark_completed">Đánh dấu hoàn thành: %1$s</string>
+    <string name="task_mark_incomplete">Đánh dấu chưa xong: %1$s</string>
+    <string name="task_due_date">Hạn: %1$s</string>
+    <string name="task_no_due_date">Chưa có hạn</string>
+    <string name="task_overdue">Quá hạn</string>
+    <string name="task_sync_pending">Chờ đồng bộ</string>
+    <string name="task_sync_synced">Đã đồng bộ</string>
+    <string name="task_subject_mobile">Lập trình di động</string>
+    <string name="task_subject_database">Cơ sở dữ liệu</string>
+    <string name="task_subject_general">Đại cương</string>
+    <string name="task_subject_other">Khác</string>
+    <string name="task_priority_low">Ưu tiên thấp</string>
+    <string name="task_priority_medium">Ưu tiên vừa</string>
+    <string name="task_priority_high">Ưu tiên cao</string>
+</resources>

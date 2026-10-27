@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sample_database_review">Ôn tập chuẩn hóa cơ sở dữ liệu</string>
+    <string name="sample_mobile_ui">Dựng giao diện Công việc</string>
+    <string name="sample_database_exercises">Hoàn thành bài tập truy vấn SQL</string>
+    <string name="sample_weekly_plan">Lập kế hoạch học tập tuần này</string>
+    <string name="sample_mobile_report">Chuẩn bị báo cáo giữa kỳ Mobile</string>
+    <string name="sample_reading">Đọc tài liệu về quản lý thời gian</string>
+</resources>
