@@ -1,6 +1,523 @@
 openapi: 3.0.3
+
 info:
   title: StudyFlow API
-  version: 0.1.0
-  description: Initial scaffold. API endpoints and schemas are not defined yet.
-paths: {}
+  version: 1.0.0
+  description: >
+    API quản lý công việc và hỗ trợ đồng bộ StudyFlow
+    theo hợp đồng Android và backend đã chốt.
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Môi trường phát triển cục bộ
+
+components:
+  schemas:
+    TaskFields:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - subjectCode
+        - dueDate
+        - priority
+        - completed
+        - isDeleted
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID do Android tạo và giữ ổn định.
+
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Tiêu đề được kiểm tra độ dài sau khi trim.
+
+        description:
+          type: string
+          maxLength: 2000
+
+        subjectCode:
+          type: string
+          enum:
+            - MOBILE
+            - DATABASE
+            - GENERAL
+            - OTHER
+
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+          description: Ngày hợp lệ theo YYYY-MM-DD hoặc null.
+
+        priority:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+
+        completed:
+          type: boolean
+
+        isDeleted:
+          type: boolean
+
+    Task:
+      allOf:
+        - $ref: '#/components/schemas/TaskFields'
+        - type: object
+          required:
+            - version
+            - serverUpdatedAt
+          properties:
+            version:
+              type: integer
+              minimum: 1
+              description: Phiên bản do server quản lý.
+
+            serverUpdatedAt:
+              type: string
+              format: date-time
+              description: Thời gian UTC do server tạo.
+
+    CreateTaskRequest:
+      allOf:
+        - $ref: '#/components/schemas/TaskFields'
+        - type: object
+          required:
+            - baseVersion
+          properties:
+            baseVersion:
+              type: integer
+              enum:
+                - 0
+              description: Tạo mới luôn dựa trên version 0.
+
+            isDeleted:
+              type: boolean
+              enum:
+                - false
+
+    UpdateTaskRequest:
+      allOf:
+        - $ref: '#/components/schemas/TaskFields'
+        - type: object
+          required:
+            - baseVersion
+          properties:
+            baseVersion:
+              type: integer
+              minimum: 1
+              description: Version server mà thay đổi đang dựa vào.
+
+            isDeleted:
+              type: boolean
+              enum:
+                - false
+
+    TaskResponse:
+      type: object
+      required:
+        - task
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+
+    TaskListResponse:
+      type: object
+      required:
+        - tasks
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+
+    ApiError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+
+        message:
+          type: string
+
+        taskId:
+          type: string
+          format: uuid
+
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/ApiError'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+
+            fieldErrors:
+              type: object
+              additionalProperties:
+                type: string
+
+    VersionConflictError:
+      allOf:
+        - $ref: '#/components/schemas/ApiError'
+        - type: object
+          required:
+            - taskId
+            - currentTask
+          properties:
+            code:
+              type: string
+              enum:
+                - VERSION_CONFLICT
+
+            currentTask:
+              $ref: '#/components/schemas/Task'
+
+    MutationIdReusedError:
+      allOf:
+        - $ref: '#/components/schemas/ApiError'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - MUTATION_ID_REUSED
+
+    TaskNotFoundError:
+      allOf:
+        - $ref: '#/components/schemas/ApiError'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - TASK_NOT_FOUND
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >
+        UUID của mutation. Khi retry, giữ nguyên key,
+        method, đường dẫn, tham số và payload.
+      schema:
+        type: string
+        format: uuid
+
+    TaskId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    DeleteBaseVersion:
+      name: baseVersion
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+  responses:
+    TaskNotFound:
+      description: ID công việc chưa từng tồn tại.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TaskNotFoundError'
+
+    WriteConflict:
+      description: >
+        Phiên bản không khớp hoặc mutation ID đã được dùng
+        cho một request khác.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/VersionConflictError'
+              - $ref: '#/components/schemas/MutationIdReusedError'
+
+    ValidationFailed:
+      description: Dữ liệu request không hợp lệ.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+
+    TooManyRequests:
+      description: >
+        Request bị giới hạn. Client giữ thay đổi
+        và tôn trọng Retry-After nếu có.
+      headers:
+        Retry-After:
+          description: >
+            Thời gian cần chờ trước khi thử lại,
+            theo định dạng của HTTP Retry-After.
+          schema:
+            type: string
+
+    TemporaryServerError:
+      description: >
+        Lỗi server tạm thời. Với request ghi chưa xác nhận,
+        client giữ nguyên mutation và retry cùng request.
+
+paths:
+  /tasks:
+    post:
+      summary: Tạo công việc
+      operationId: createTask
+      description: >
+        Tạo task với UUID do Android cung cấp.
+        Server kiểm tra receipt trước version.
+        Retry mutation đã thành công trả lại status/body đã lưu
+        và không tăng version.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+            examples:
+              createTask:
+                externalValue: ./examples/create-task-request.json
+
+      responses:
+        '201':
+          description: Tạo thành công với version 1.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+              examples:
+                createdTask:
+                  externalValue: ./examples/task-response.json
+
+        '409':
+          description: Task ID đã tồn tại hoặc mutation ID bị dùng lại.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/VersionConflictError'
+                  - $ref: '#/components/schemas/MutationIdReusedError'
+              examples:
+                versionConflict:
+                  externalValue: ./examples/conflict-response.json
+                mutationIdReused:
+                  externalValue: ./examples/mutation-id-reused-response.json
+
+        '422':
+          description: Dữ liệu không hợp lệ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              examples:
+                validationError:
+                  externalValue: ./examples/error-response.json
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+        '5XX':
+          $ref: '#/components/responses/TemporaryServerError'
+                  
+    get:
+      summary: Lấy danh sách công việc
+      operationId: listTasks
+      description: >
+        Trả danh sách công việc từ một snapshot đọc nhất quán.
+        Không phân trang trong phiên bản đầu.
+        Android luôn gửi includeDeleted=true khi đồng bộ
+        để nhận cả dấu vết xóa.
+      parameters:
+        - name: includeDeleted
+          in: query
+          description: >
+            Gửi true để nhận cả công việc đã xóa logic.
+            Android luôn gửi true khi đồng bộ.
+          schema:
+            type: boolean
+          example: true
+      responses:
+        '200':
+          description: Danh sách công việc, có thể rỗng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+              examples:
+                taskList:
+                  externalValue: ./examples/task-list.json
+                emptyList:
+                  externalValue: ./examples/empty-task-list.json
+
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+        '5XX':
+          $ref: '#/components/responses/TemporaryServerError'
+
+  /tasks/{id}:
+    get:
+      summary: Lấy chi tiết công việc
+      operationId: getTask
+      description: >
+        Trả phiên bản hiện tại của công việc, kể cả tombstone.
+        Chỉ trả 404 nếu ID chưa từng tồn tại.
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Công việc hiện tại, có thể đã xóa logic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+              examples:
+                activeTask:
+                  externalValue: ./examples/task-response.json
+                deletedTask:
+                  externalValue: ./examples/delete-task-response.json
+
+        '404':
+          $ref: '#/components/responses/TaskNotFound'
+
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+        '5XX':
+          $ref: '#/components/responses/TemporaryServerError'
+
+    put:
+      summary: Cập nhật công việc
+      operationId: updateTask
+      description: >
+        Cập nhật toàn bộ nội dung khi baseVersion khớp
+        phiên bản hiện tại trên server.
+        ID trong body phải khớp ID trên đường dẫn.
+        Không tự tạo công việc chưa tồn tại.
+        PUT dùng isDeleted=false; có thể giữ lại công việc
+        trước tombstone khi người dùng đã quyết định
+        và version khớp.
+        Server kiểm tra receipt trước version.
+        Kiểm tra version, ghi task và receipt thành công
+        được thực hiện nguyên tử.
+        Retry mutation thành công trả lại status/body đã lưu
+        và không tăng version lần nữa.
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+            examples:
+              updateTask:
+                externalValue: ./examples/update-task-request.json
+      responses:
+        '200':
+          description: Cập nhật thành công, trả task với version mới.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+              examples:
+                updatedTask:
+                  externalValue: ./examples/update-task-response.json
+
+        '404':
+          $ref: '#/components/responses/TaskNotFound'
+
+        '409':
+          $ref: '#/components/responses/WriteConflict'
+
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+        '5XX':
+          $ref: '#/components/responses/TemporaryServerError'
+
+    delete:
+      summary: Xóa logic công việc
+      operationId: deleteTask
+      description: >
+        Xóa logic khi baseVersion khớp phiên bản hiện tại.
+        Không có request body.
+        Giữ ID và các trường nghiệp vụ, đặt isDeleted=true,
+        tăng version và cập nhật thời gian server.
+        Không xóa vật lý trong giai đoạn demo.
+        Server kiểm tra receipt trước version.
+        Kiểm tra version, ghi task và receipt thành công
+        được thực hiện nguyên tử.
+        Retry mutation thành công trả lại status/body đã lưu
+        và không tăng version lần nữa.
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/DeleteBaseVersion'
+      responses:
+        '200':
+          description: Xóa logic thành công, trả task tombstone.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+              examples:
+                deletedTask:
+                  externalValue: ./examples/delete-task-response.json
+
+        '404':
+          $ref: '#/components/responses/TaskNotFound'
+
+        '409':
+          $ref: '#/components/responses/WriteConflict'
+
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+        '5XX':
+          $ref: '#/components/responses/TemporaryServerError'
+
+  /health:
+    get:
+      summary: Kiểm tra server sẵn sàng
+      operationId: getHealth
+      description: >
+        Kiểm tra trạng thái sẵn sàng của server.
+        Không thay thế kết quả đồng bộ thực tế.
+        Hợp đồng hiện chưa quy định cấu trúc body response.
+      responses:
+        '200':
+          description: Server sẵn sàng.
+
+        '5XX':
+          $ref: '#/components/responses/TemporaryServerError'
