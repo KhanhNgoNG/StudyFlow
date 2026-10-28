@@ -3,5 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "description": "StudyFlow backend scaffold",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "express": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=22.14.0 <23"
+  },
+  "scripts": {
+    "start": "node --env-file=.env src/server.js",
+    "dev": "node --watch --env-file=.env src/server.js"
+  }
 }
