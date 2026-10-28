@@ -1,1 +1,17 @@
-{}
+{
+  "code": "VERSION_CONFLICT",
+  "message": "Task changed since baseVersion",
+  "taskId": "612954cb-842b-4d60-a0c8-48a7cc401814",
+  "currentTask": {
+    "id": "612954cb-842b-4d60-a0c8-48a7cc401814",
+    "title": "Hoàn thiện tài liệu API StudyFlow",
+    "description": "Bổ sung tài liệu OpenAPI cho Android và backend",
+    "subjectCode": "MOBILE",
+    "dueDate": "2026-10-29",
+    "priority": "MEDIUM",
+    "completed": false,
+    "isDeleted": false,
+    "version": 2,
+    "serverUpdatedAt": "2026-10-28T03:04:00Z"
+  }
+}

@@ -1,1 +1,8 @@
-{}
+{
+  "code": "VALIDATION_ERROR",
+  "message": "Invalid task data",
+  "taskId": "612954cb-842b-4d60-a0c8-48a7cc401814",
+  "fieldErrors": {
+    "title": "Title is required"
+  }
+}

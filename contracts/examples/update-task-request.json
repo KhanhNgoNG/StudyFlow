@@ -1,0 +1,11 @@
+{
+  "id": "612954cb-842b-4d60-a0c8-48a7cc401814",
+  "baseVersion": 1,
+  "title": "Hoàn thiện và kiểm thử API StudyFlow",
+  "description": "Triển khai CRUD và kiểm tra gửi lại theo hợp đồng",
+  "subjectCode": "MOBILE",
+  "dueDate": null,
+  "priority": "HIGH",
+  "completed": false,
+  "isDeleted": false
+}

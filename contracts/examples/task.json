@@ -1,1 +1,12 @@
-{}
+{
+  "id": "612954cb-842b-4d60-a0c8-48a7cc401814",
+  "title": "Hoàn thiện API StudyFlow",
+  "description": "Triển khai API theo hợp đồng đã chốt",
+  "subjectCode": "MOBILE",
+  "dueDate": null,
+  "priority": "MEDIUM",
+  "completed": false,
+  "isDeleted": false,
+  "version": 1,
+  "serverUpdatedAt": "2026-10-28T03:00:00Z"
+}

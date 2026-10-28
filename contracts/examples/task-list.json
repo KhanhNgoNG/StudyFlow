@@ -1,1 +1,28 @@
-{}
+{
+  "tasks": [
+    {
+      "id": "612954cb-842b-4d60-a0c8-48a7cc401814",
+      "title": "Hoàn thiện API StudyFlow",
+      "description": "Triển khai API theo hợp đồng đã chốt",
+      "subjectCode": "MOBILE",
+      "dueDate": null,
+      "priority": "MEDIUM",
+      "completed": false,
+      "isDeleted": false,
+      "version": 1,
+      "serverUpdatedAt": "2026-10-28T03:00:00Z"
+    },
+    {
+      "id": "e5b951a7-797c-42e8-8369-3491c123b1a5",
+      "title": "Hoàn thiện và kiểm thử API StudyFlow",
+      "description": "Triển khai CRUD và kiểm tra gửi lại theo hợp đồng",
+      "subjectCode": "MOBILE",
+      "dueDate": null,
+      "priority": "HIGH",
+      "completed": false,
+      "isDeleted": true,
+      "version": 3,
+      "serverUpdatedAt": "2026-10-28T03:10:00Z"
+    }
+  ]
+}
