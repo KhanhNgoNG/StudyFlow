@@ -7,12 +7,10 @@
     <string name="home_title">Học tập theo nhịp của bạn</string>
     <string name="home_description">Trang chủ sẽ được bổ sung ở giai đoạn sau. Bạn có thể xem và đánh dấu công việc trong tab Công việc.</string>
     <string name="home_open_tasks">Xem công việc</string>
-    <string name="phase_one_label">Giai đoạn 1 · Dữ liệu mẫu</string>
+    <string name="phase_label">Giai đoạn 3 · Lưu trữ cục bộ</string>
     <string name="sync_title">Đồng bộ sẽ sớm có mặt</string>
-    <string name="sync_description">Giai đoạn này chưa kết nối máy chủ. Nhãn “Chờ đồng bộ” và “Đã đồng bộ” trên công việc chỉ dùng để minh họa giao diện.</string>
-    <string name="sync_memory_notice">Thay đổi hiện chỉ được giữ trong bộ nhớ và sẽ mất khi tiến trình ứng dụng được tạo lại.</string>
+    <string name="sync_description">Công việc đã được lưu trên thiết bị. Thay đổi đang chờ đồng bộ; ứng dụng chưa kết nối máy chủ.</string>
+    <string name="sync_storage_notice">Công việc đã lưu vẫn còn khi đóng và mở lại ứng dụng. Chưa có đồng bộ giữa các thiết bị.</string>
     <string name="add_task">Thêm công việc</string>
-    <string name="add_task_coming_soon">Chức năng thêm công việc sẽ được bổ sung</string>
-    <string name="task_detail_coming_soon">Chi tiết công việc sẽ được bổ sung</string>
     <string name="dismiss_snackbar">Đóng thông báo</string>
 </resources>

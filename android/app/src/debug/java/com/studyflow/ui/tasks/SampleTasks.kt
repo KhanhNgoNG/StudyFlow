@@ -5,10 +5,11 @@ import com.studyflow.R
 import com.studyflow.domain.model.SubjectCode
 import com.studyflow.domain.model.Task
 import com.studyflow.domain.model.TaskPriority
+import com.studyflow.domain.model.LocalSyncState
 import java.time.LocalDate
 
 object SampleTasks {
-    /** Call from the ViewModel factory so dates and titles are seeded only once per holder. */
+    /** Debug/preview fixture only. Application startup never seeds these into Room. */
     fun create(resources: Resources, today: LocalDate): List<TaskItem> = listOf(
         TaskItem(
             task = Task(
@@ -18,7 +19,7 @@ object SampleTasks {
                 priority = TaskPriority.HIGH,
                 dueDate = today.minusDays(2),
             ),
-            syncStatus = DemoSyncStatus.PENDING,
+            syncStatus = LocalSyncState.PENDING,
         ),
         TaskItem(
             task = Task(
@@ -28,7 +29,7 @@ object SampleTasks {
                 priority = TaskPriority.HIGH,
                 dueDate = today,
             ),
-            syncStatus = DemoSyncStatus.PENDING,
+            syncStatus = LocalSyncState.PENDING,
         ),
         TaskItem(
             task = Task(
@@ -38,7 +39,7 @@ object SampleTasks {
                 priority = TaskPriority.MEDIUM,
                 dueDate = today,
             ),
-            syncStatus = DemoSyncStatus.SYNCED,
+            syncStatus = LocalSyncState.SYNCED,
         ),
         TaskItem(
             task = Task(
@@ -49,7 +50,7 @@ object SampleTasks {
                 dueDate = today,
                 isCompleted = true,
             ),
-            syncStatus = DemoSyncStatus.SYNCED,
+            syncStatus = LocalSyncState.SYNCED,
         ),
         TaskItem(
             task = Task(
@@ -59,7 +60,7 @@ object SampleTasks {
                 priority = TaskPriority.MEDIUM,
                 dueDate = today.plusDays(3),
             ),
-            syncStatus = DemoSyncStatus.PENDING,
+            syncStatus = LocalSyncState.PENDING,
         ),
         TaskItem(
             task = Task(
@@ -69,7 +70,7 @@ object SampleTasks {
                 priority = TaskPriority.LOW,
                 dueDate = null,
             ),
-            syncStatus = DemoSyncStatus.SYNCED,
+            syncStatus = LocalSyncState.SYNCED,
         ),
     )
 }

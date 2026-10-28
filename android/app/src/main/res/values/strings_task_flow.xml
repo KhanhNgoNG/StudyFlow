@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="task_edit_title">Sửa công việc</string>
+    <string name="task_detail_title">Chi tiết công việc</string>
+    <string name="task_editor_title">Tên công việc</string>
+    <string name="task_editor_description">Mô tả</string>
+    <string name="task_editor_storage_notice">Nhấn Lưu để lưu công việc trên thiết bị.</string>
+    <string name="task_title_required">Nhập tên công việc.</string>
+    <string name="task_title_too_long">Tên công việc không được vượt quá 120 ký tự.</string>
+    <string name="task_title_hint">Bắt buộc · 1–120 ký tự sau khi bỏ khoảng trắng đầu/cuối</string>
+    <string name="task_description_too_long">Mô tả không được vượt quá 2.000 ký tự.</string>
+    <string name="task_description_count">%1$d/2.000 ký tự</string>
+    <string name="task_subject_label">Môn học</string>
+    <string name="task_due_label">Hạn hoàn thành</string>
+    <string name="task_priority_label">Mức ưu tiên</string>
+    <string name="task_editor_priority_low">Thấp</string>
+    <string name="task_editor_priority_medium">Vừa</string>
+    <string name="task_editor_priority_high">Cao</string>
+    <string name="task_choose_date">Chọn ngày</string>
+    <string name="task_clear_date">Xóa ngày đã chọn</string>
+    <string name="task_date_confirm">Chọn</string>
+    <string name="task_cancel">Hủy</string>
+    <string name="task_save">Lưu</string>
+    <string name="task_back">Quay lại</string>
+    <string name="task_discard_title">Bỏ thay đổi chưa lưu?</string>
+    <string name="task_discard_body">Nội dung bạn vừa nhập chưa được áp dụng cho công việc.</string>
+    <string name="task_discard">Bỏ thay đổi</string>
+    <string name="task_continue_editing">Tiếp tục sửa</string>
+    <string name="task_added">Đã thêm công việc</string>
+    <string name="task_deleted">Đã xóa công việc</string>
+    <string name="task_unavailable_title">Không tìm thấy công việc</string>
+    <string name="task_unavailable_body">Công việc không tồn tại hoặc đã bị xóa. Bạn có thể quay lại để xem danh sách hiện tại.</string>
+    <string name="task_return_to_list">Về danh sách công việc</string>
+    <string name="task_empty_description">Chưa có mô tả</string>
+    <string name="task_completion_label">Trạng thái</string>
+    <string name="task_sync_label">Đồng bộ</string>
+    <string name="task_edit">Sửa</string>
+    <string name="task_reopen">Mở lại</string>
+    <string name="task_complete">Đánh dấu hoàn thành</string>
+    <string name="task_delete">Xóa công việc</string>
+    <string name="task_delete_title">Xóa công việc?</string>
+    <string name="task_delete_body">Bạn có muốn xóa “%1$s” khỏi danh sách công việc?</string>
+</resources>

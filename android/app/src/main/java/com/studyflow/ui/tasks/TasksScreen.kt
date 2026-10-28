@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,7 +46,9 @@ fun TasksScreen(
     onFilterChange: (TaskFilter) -> Unit,
     onToggleCompleted: (String) -> Unit,
     onClearConditions: () -> Unit,
-    onTaskClick: () -> Unit,
+    onTaskClick: (String) -> Unit,
+    onRetry: () -> Unit,
+    onDismissWriteError: () -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
@@ -103,12 +106,38 @@ fun TasksScreen(
         }
         item(key = "demo_notice", contentType = "notice") {
             Text(
-                text = stringResource(R.string.tasks_demo_notice),
+                text = stringResource(R.string.tasks_local_notice),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (state.tasks.isEmpty()) {
+        if (state.hasWriteError) {
+            item(key = "write_error") {
+                Column {
+                    Text(stringResource(R.string.task_write_error), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onDismissWriteError, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.dismiss_snackbar))
+                    }
+                }
+            }
+        }
+        if (state.isLoading) {
+            item(key = "loading") {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    CircularProgressIndicator()
+                    Text(stringResource(R.string.tasks_loading), style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+        } else if (state.hasReadError) {
+            item(key = "read_error") {
+                Column {
+                    Text(stringResource(R.string.tasks_read_error), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.tasks_retry))
+                    }
+                }
+            }
+        } else if (state.tasks.isEmpty()) {
             item(key = "empty", contentType = "empty") {
                 EmptyTasks(
                     hasSourceTasks = state.totalCount > 0,
@@ -123,8 +152,9 @@ fun TasksScreen(
             items(items = state.tasks, key = { it.task.id }, contentType = { "task" }) { item ->
                 TaskCard(
                     item = item,
+                    isMutating = item.task.id in state.mutatingIds,
                     onToggleCompleted = { onToggleCompleted(item.task.id) },
-                    onClick = onTaskClick,
+                    onClick = { onTaskClick(item.task.id) },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

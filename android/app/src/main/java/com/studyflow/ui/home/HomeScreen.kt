@@ -25,7 +25,7 @@ fun HomeScreen(onOpenTasks: () -> Unit, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Icon(painterResource(R.drawable.ic_home), null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(stringResource(R.string.phase_one_label), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.phase_label), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
         Text(stringResource(R.string.home_title), style = MaterialTheme.typography.titleLarge)
         Text(stringResource(R.string.home_description), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = onOpenTasks, modifier = Modifier.fillMaxWidth()) {

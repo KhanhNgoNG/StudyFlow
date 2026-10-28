@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.studyflow.R
 import com.studyflow.domain.model.SubjectCode
 import com.studyflow.domain.model.TaskPriority
-import com.studyflow.ui.tasks.DemoSyncStatus
+import com.studyflow.domain.model.LocalSyncState
 import com.studyflow.ui.tasks.TaskItem
 import com.studyflow.ui.theme.LocalStudyFlowColors
 import java.time.format.DateTimeFormatter
@@ -42,6 +42,7 @@ fun TaskCard(
     onToggleCompleted: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isMutating: Boolean = false,
 ) {
     val task = item.task
     val completionLabel = stringResource(
@@ -67,6 +68,7 @@ fun TaskCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Checkbox consumes its own tap; the parent card action is a separate target.
                 Checkbox(
+                    enabled = !isMutating,
                     checked = task.isCompleted,
                     onCheckedChange = { onToggleCompleted() },
                     modifier = Modifier
@@ -141,8 +143,8 @@ fun TaskCard(
                 StatusBadge(
                     text = stringResource(
                         when (item.syncStatus) {
-                            DemoSyncStatus.PENDING -> R.string.task_sync_pending
-                            DemoSyncStatus.SYNCED -> R.string.task_sync_synced
+                            LocalSyncState.PENDING -> R.string.task_sync_pending
+                            LocalSyncState.SYNCED -> R.string.task_sync_synced
                         },
                     ),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -191,14 +193,14 @@ private fun StatusBadge(
     }
 }
 
-private fun SubjectCode.labelResource(): Int = when (this) {
+internal fun SubjectCode.labelResource(): Int = when (this) {
     SubjectCode.MOBILE -> R.string.task_subject_mobile
     SubjectCode.DATABASE -> R.string.task_subject_database
     SubjectCode.GENERAL -> R.string.task_subject_general
     SubjectCode.OTHER -> R.string.task_subject_other
 }
 
-private fun TaskPriority.labelResource(): Int = when (this) {
+internal fun TaskPriority.labelResource(): Int = when (this) {
     TaskPriority.LOW -> R.string.task_priority_low
     TaskPriority.MEDIUM -> R.string.task_priority_medium
     TaskPriority.HIGH -> R.string.task_priority_high
