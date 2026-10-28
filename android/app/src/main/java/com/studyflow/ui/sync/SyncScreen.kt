@@ -23,9 +23,9 @@ fun SyncScreen(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Icon(painterResource(R.drawable.ic_sync), null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(stringResource(R.string.phase_one_label), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.phase_label), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
         Text(stringResource(R.string.sync_title), style = MaterialTheme.typography.titleLarge)
         Text(stringResource(R.string.sync_description), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(stringResource(R.string.sync_memory_notice), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.sync_storage_notice), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

@@ -11,4 +11,5 @@ data class Task(
     val priority: TaskPriority,
     val dueDate: LocalDate?,
     val isCompleted: Boolean = false,
+    val isDeleted: Boolean = false,
 )

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="task_saving">Đang lưu…</string>
+    <string name="tasks_loading">Đang đọc công việc…</string>
+    <string name="tasks_read_error">Không thể đọc dữ liệu trên thiết bị. Hãy thử lại.</string>
+    <string name="tasks_retry">Thử lại</string>
+    <string name="task_write_error">Chưa lưu được thay đổi trên thiết bị. Vui lòng thử lại.</string>
+</resources>

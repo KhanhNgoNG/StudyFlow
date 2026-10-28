@@ -4,16 +4,27 @@ import com.studyflow.domain.model.SubjectCode
 import com.studyflow.domain.model.Task
 import com.studyflow.domain.model.TaskPriority
 import java.time.LocalDate
+import com.studyflow.domain.model.LocalSyncState
+import com.studyflow.testing.FakeTaskRepository
+import com.studyflow.testing.MainDispatcherRule
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TasksViewModelTest {
+    @get:Rule val main = MainDispatcherRule()
     private val today = LocalDate.of(2026, 10, 27)
 
     @Test
-    fun `search trims edges ignores case and combines with completion filter`() {
+    fun `search trims edges ignores case and combines with completion filter`() = runTest {
         val viewModel = model(
             item("open", title = "Bài tập SQL"),
             item("done", title = "Ôn tập sql", completed = true),
@@ -33,9 +44,9 @@ class TasksViewModelTest {
     }
 
     @Test
-    fun `completing a filtered task removes it from result but preserves source`() {
+    fun `completing a filtered task removes it from result but preserves source`() = runTest {
         val viewModel = model(
-            item("one", title = "SQL hôm nay", syncStatus = DemoSyncStatus.SYNCED),
+            item("one", title = "SQL hôm nay", syncStatus = LocalSyncState.SYNCED),
             item("two", title = "Mobile hôm nay"),
         )
         viewModel.onQueryChange("SQL")
@@ -54,14 +65,14 @@ class TasksViewModelTest {
         val completed = viewModel.uiState.value.tasks.single()
         assertEquals("one", completed.task.id)
         assertTrue(completed.task.isCompleted)
-        assertEquals(DemoSyncStatus.PENDING, completed.syncStatus)
+        assertEquals(LocalSyncState.PENDING, completed.syncStatus)
 
         viewModel.clearConditions()
         assertEquals(listOf("one", "two"), viewModel.visibleIds())
     }
 
     @Test
-    fun `uncompleting a task while completed filter is active updates immediately`() {
+    fun `uncompleting a task while completed filter is active updates immediately`() = runTest {
         val viewModel = model(item("done", completed = true), item("open"))
         viewModel.onFilterChange(TaskFilter.COMPLETED)
 
@@ -74,7 +85,7 @@ class TasksViewModelTest {
     }
 
     @Test
-    fun `ordering uses deadline then priority then id with no deadline last`() {
+    fun `ordering uses deadline then priority then id with no deadline last`() = runTest {
         val viewModel = model(
             item("no-date-high", dueDate = null, priority = TaskPriority.HIGH),
             item("today-low", priority = TaskPriority.LOW),
@@ -98,7 +109,7 @@ class TasksViewModelTest {
     }
 
     @Test
-    fun `overdue excludes completed today future and undated tasks`() {
+    fun `overdue excludes completed today future and undated tasks`() = runTest {
         val viewModel = model(
             item("overdue", dueDate = today.minusDays(1)),
             item("done", dueDate = today.minusDays(1), completed = true),
@@ -113,9 +124,9 @@ class TasksViewModelTest {
     }
 
     @Test
-    fun `date refresh updates overdue without moving sample deadlines or resetting conditions`() {
+    fun `date refresh updates overdue without moving sample deadlines or resetting conditions`() = runTest {
         var currentDate = today
-        val viewModel = TasksViewModel(listOf(item("one", title = "SQL"))) { currentDate }
+        val viewModel = createModel(listOf(item("one", title = "SQL"))) { currentDate }
         viewModel.onQueryChange("SQL")
         viewModel.onFilterChange(TaskFilter.INCOMPLETE)
         assertFalse(viewModel.uiState.value.tasks.single().isOverdue)
@@ -131,7 +142,7 @@ class TasksViewModelTest {
     }
 
     @Test
-    fun `empty source and no matching results remain distinguishable`() {
+    fun `empty source and no matching results remain distinguishable`() = runTest {
         val empty = model()
         assertTrue(empty.uiState.value.tasks.isEmpty())
         assertEquals(0, empty.uiState.value.totalCount)
@@ -145,7 +156,7 @@ class TasksViewModelTest {
     }
 
     @Test
-    fun `query searches only title and blank spaces show all eligible items`() {
+    fun `query searches only title and blank spaces show all eligible items`() = runTest {
         val entry = item("one", title = "Mobile").let {
             it.copy(task = it.task.copy(description = "SQL"))
         }
@@ -158,9 +169,9 @@ class TasksViewModelTest {
     }
 
     @Test
-    fun `unknown toggle id is harmless and initial mutable list is defensively copied`() {
+    fun `unknown toggle id is harmless and initial mutable list is defensively copied`() = runTest {
         val original = mutableListOf(item("one"))
-        val viewModel = TasksViewModel(original) { today }
+        val viewModel = createModel(original)
         original.clear()
 
         viewModel.toggleCompleted("missing")
@@ -169,7 +180,14 @@ class TasksViewModelTest {
         assertFalse(viewModel.uiState.value.tasks.single().task.isCompleted)
     }
 
-    private fun model(vararg items: TaskItem) = TasksViewModel(items.toList()) { today }
+    private fun TestScope.model(vararg items: TaskItem) = createModel(items.toList())
+    private fun TestScope.createModel(items: List<TaskItem>, date: () -> LocalDate = { today }): TasksViewModel {
+        val vm = TasksViewModel(FakeTaskRepository(items), date)
+        main.own(vm)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.flowState.collect {} }
+        return vm
+    }
 
     private fun TasksViewModel.visibleIds() = uiState.value.tasks.map { it.task.id }
 
@@ -179,7 +197,7 @@ class TasksViewModelTest {
         dueDate: LocalDate? = today,
         priority: TaskPriority = TaskPriority.MEDIUM,
         completed: Boolean = false,
-        syncStatus: DemoSyncStatus = DemoSyncStatus.PENDING,
+        syncStatus: LocalSyncState = LocalSyncState.PENDING,
     ) = TaskItem(
         task = Task(
             id = id,

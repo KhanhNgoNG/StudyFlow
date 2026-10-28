@@ -5,9 +5,9 @@
     <string name="tasks_filter_all">Tất cả</string>
     <string name="tasks_filter_incomplete">Chưa xong</string>
     <string name="tasks_filter_completed">Hoàn thành</string>
-    <string name="tasks_demo_notice">Dữ liệu mẫu · Nhãn đồng bộ chỉ để minh họa</string>
+    <string name="tasks_local_notice">Đã lưu trên thiết bị · Chưa đồng bộ máy chủ</string>
     <string name="tasks_empty_title">Chưa có công việc</string>
-    <string name="tasks_empty_body">Các công việc học tập sẽ xuất hiện tại đây. Chức năng thêm công việc sẽ được bổ sung.</string>
+    <string name="tasks_empty_body">Các công việc học tập sẽ xuất hiện tại đây. Nhấn nút cộng để thêm công việc.</string>
     <string name="tasks_no_results_title">Không tìm thấy công việc</string>
     <string name="tasks_no_results_body">Thử từ khóa khác hoặc xóa điều kiện tìm kiếm và lọc để xem lại danh sách.</string>
     <string name="tasks_clear_conditions">Xóa tìm kiếm và bộ lọc</string>
