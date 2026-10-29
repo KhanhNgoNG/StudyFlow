@@ -8,6 +8,10 @@ internal val StudyFlowBackground = Color(0xFFFAFAFC)
 internal val StudyFlowInk = Color(0xFF17172B)
 
 data class StudyFlowColors(
+    val warningContainer: Color = Color(0xFFFFEED5),
+    val onWarningContainer: Color = Color(0xFF805000),
+    val successContainer: Color = Color(0xFFE0F2ED),
+    val onSuccessContainer: Color = Color(0xFF225C4A),
     val subjectMobile: Color = Color(0xFFEDE8FF),
     val subjectOnMobile: Color = Color(0xFF493893),
     val subjectDatabase: Color = Color(0xFFE0F2ED),

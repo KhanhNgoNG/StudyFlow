@@ -246,6 +246,17 @@ class RoomTaskRepositoryTest {
         assertEquals(deletedBefore, repo.getStoredTask(deletedId))
     }
 
+    @Test fun storedFlowIncludesPendingTombstonesWhileActiveFlowHidesThem() = runBlocking {
+        val deleted = repo.create(content).id
+        val active = repo.create(content.copy(title = "Active")).id
+        repo.softDelete(deleted)
+        val stored = withTimeout(5_000) { repo.observeStoredTasks().first() }
+        assertEquals(setOf(deleted, active), stored.map { it.task.id }.toSet())
+        assertEquals(2, stored.count { it.syncState == LocalSyncState.PENDING })
+        assertEquals(1, stored.count { it.task.isDeleted && it.syncState == LocalSyncState.PENDING })
+        assertEquals(listOf(active), withTimeout(5_000) { repo.observeActiveTasks().first() }.map { it.task.id })
+    }
+
     private suspend fun <T> Channel<T>.next(predicate: (T) -> Boolean): T = withTimeout(5_000) {
         var event = receive()
         while (!predicate(event)) event = receive()

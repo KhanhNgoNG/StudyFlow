@@ -12,6 +12,8 @@ sealed interface TaskWriteResult {
 class TaskStorageException(cause: Throwable) : RuntimeException("Local task storage failed", cause)
 
 interface TaskRepository {
+    /** All local records, including deleted records waiting to be sent. */
+    fun observeStoredTasks(): Flow<List<LocalTask>>
     fun observeActiveTasks(): Flow<List<LocalTask>>
     fun observeTask(id: String): Flow<LocalTask?>
     suspend fun getStoredTask(id: String): LocalTask?

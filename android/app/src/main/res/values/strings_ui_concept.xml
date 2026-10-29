@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_pending_records">%1$d công việc chờ đồng bộ</string>
+    <string name="ui_progress_fraction">%1$d/%2$d</string>
+    <string name="ui_progress_completed">hoàn thành</string>
+    <string name="ui_save_task">Lưu công việc</string>
+    <string name="ui_conflict_intro">Công việc đã thay đổi ở hai phía</string>
+</resources>

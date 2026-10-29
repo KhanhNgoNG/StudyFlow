@@ -21,6 +21,7 @@ class FakeTaskRepository(initial: List<TaskItem> = emptyList()) : TaskRepository
     var readGate: CompletableDeferred<Unit>? = null
     var writeGate: CompletableDeferred<Unit>? = null
 
+    override fun observeStoredTasks() = observe { rows }
     override fun observeActiveTasks() = observe { rows.map { list -> list.filter { !it.task.isDeleted } } }
     override fun observeTask(id: String) = observe { rows.map { list -> list.firstOrNull { it.task.id == id && !it.task.isDeleted } } }
     private fun <T> observe(source: () -> Flow<T>): Flow<T> = flow {

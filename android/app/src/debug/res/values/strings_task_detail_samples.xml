@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="detail_sample_title">Thiết kế giao diện StudyFlow</string>
+    <string name="detail_sample_description">Hoàn thiện giao diện trang chủ, danh sách công việc và màn hình xử lý xung đột.</string>
+    <string name="detail_sample_long_title">Chuẩn bị báo cáo, rà soát nội dung và hoàn thiện giao diện quản lý công việc học tập StudyFlow trước buổi thuyết trình</string>
+    <string name="detail_sample_long_description">Đọc lại yêu cầu, đối chiếu bố cục trên màn hình nhỏ và ghi nhận kết quả kiểm tra. Nội dung đầy đủ cần cuộn được và không bị cắt khi tăng cỡ chữ.</string>
+    <string name="detail_demo_seed">Tạo dữ liệu thử Chi tiết công việc</string>
+    <string name="detail_sample_overdue_title">Rà soát bài tập đã quá hạn</string>
+</resources>

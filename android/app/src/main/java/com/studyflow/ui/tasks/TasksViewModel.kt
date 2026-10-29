@@ -6,7 +6,11 @@ import com.studyflow.data.repository.TaskRepository
 import com.studyflow.data.repository.TaskStorageException
 import com.studyflow.data.repository.TaskWriteResult
 import com.studyflow.domain.model.LocalTask
-import com.studyflow.domain.model.TaskPriority
+import com.studyflow.domain.model.LocalSyncState
+import com.studyflow.ui.home.HomeUiState
+import com.studyflow.ui.home.homeConditions
+import com.studyflow.ui.home.summarizeHome
+import com.studyflow.ui.sync.SyncUiState
 import com.studyflow.ui.navigation.TaskFlowUiState
 import com.studyflow.ui.navigation.TaskMutationResult
 import com.studyflow.ui.navigation.TaskNotice
@@ -49,34 +53,36 @@ class TasksViewModel(
     private val sharing = SharingStarted.WhileSubscribed(5_000)
 
     private val source = retry.flatMapLatest {
-        repository.observeActiveTasks().readStates()
+        repository.observeStoredTasks().readStates()
     }.stateIn(viewModelScope, sharing, ReadState.Loading)
 
     val uiState: StateFlow<TasksUiState> = combine(source, conditions, today, writeError, pendingIds) {
         read, criteria, date, error, pending ->
         val items = (read as? ReadState.Data)?.value.orEmpty()
         TasksUiState(
-            query = criteria.query, filter = criteria.filter,
-            tasks = items.asSequence().filter { !it.task.isDeleted }
-                .filter { it.task.title.contains(criteria.query.trim(), ignoreCase = true) }
-                .filter { when (criteria.filter) {
-                    TaskFilter.ALL -> true
-                    TaskFilter.INCOMPLETE -> !it.task.isCompleted
-                    TaskFilter.COMPLETED -> it.task.isCompleted
-                } }
-                .sortedWith(compareBy<LocalTask, LocalDate?>(nullsLast()) { it.task.dueDate }
-                    .thenBy { when (it.task.priority) {
-                        TaskPriority.HIGH -> 0
-                        TaskPriority.MEDIUM -> 1
-                        TaskPriority.LOW -> 2
-                    } }.thenBy { it.task.id })
-                .map { it.toItem(date) }.toList(),
+            query = criteria.query, filter = criteria.filter, dateFilter = criteria.dateFilter,
+            tasks = items.selectTasks(criteria, date),
             totalCount = items.count { !it.task.isDeleted },
             isLoading = read == ReadState.Loading,
             hasReadError = read == ReadState.Error,
             hasWriteError = error, mutatingIds = pending,
         )
     }.stateIn(viewModelScope, sharing, TasksUiState())
+
+    val homeState: StateFlow<HomeUiState> = combine(source, today, writeError, pendingIds) { read, date, error, pending ->
+        summarizeHome((read as? ReadState.Data)?.value.orEmpty(), date).copy(
+            isLoading = read == ReadState.Loading, hasReadError = read == ReadState.Error,
+            hasWriteError = error, mutatingIds = pending,
+        )
+    }.stateIn(viewModelScope, sharing, HomeUiState(today = today.value))
+
+    val syncState: StateFlow<SyncUiState> = source.map { read ->
+        val pending = (read as? ReadState.Data)?.value.orEmpty().filter { it.syncState == LocalSyncState.PENDING }
+        SyncUiState(
+            pendingCount = pending.size, pendingDeletedCount = pending.count { it.task.isDeleted },
+            isLoading = read == ReadState.Loading, hasReadError = read == ReadState.Error,
+        )
+    }.stateIn(viewModelScope, sharing, SyncUiState())
 
     private val detailRead = combine(
         route.map { if (it.page == TaskPage.DETAIL) it.taskId else null }.distinctUntilChanged(), retry,
@@ -92,6 +98,7 @@ class TasksViewModel(
             val state = if (read.id == current.taskId) read.state else ReadState.Loading
             current.copy(detail = current.detail.copy(
                 item = (state as? ReadState.Data)?.value?.toItem(date),
+                localUpdatedAt = (state as? ReadState.Data)?.value?.localUpdatedAt,
                 isLoading = state == ReadState.Loading,
                 hasReadError = state == ReadState.Error,
                 isMutating = current.taskId in pending,
@@ -102,6 +109,7 @@ class TasksViewModel(
     fun onQueryChange(value: String) { conditions.value = conditions.value.copy(query = value) }
     fun onFilterChange(value: TaskFilter) { conditions.value = conditions.value.copy(filter = value) }
     fun clearConditions() { conditions.value = TaskConditions() }
+    fun showHomeGroup(dateFilter: TaskDateFilter) { conditions.value = homeConditions(dateFilter) }
     fun refreshToday() { today.value = todayProvider() }
     fun retryRead() { retry.value += 1 }
     fun dismissWriteError() { writeError.value = false }
@@ -266,8 +274,3 @@ class TasksViewModel(
                 if (failure is TaskStorageException) emit(ReadState.Error) else throw failure
             }
 }
-
-private fun LocalTask.toItem(today: LocalDate) = TaskItem(
-    task = task, syncStatus = syncState,
-    isOverdue = !task.isCompleted && task.dueDate?.isBefore(today) == true,
-)

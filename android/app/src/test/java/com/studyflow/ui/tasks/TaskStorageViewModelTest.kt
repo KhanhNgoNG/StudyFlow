@@ -165,4 +165,26 @@ class TaskStorageViewModelTest {
         assertEquals(TaskPage.LIST, vm.flowState.value.page)
         assertTrue(requireNotNull(repo.getStoredTask(id)).task.isDeleted)
     }
+
+    @Test fun detailUsesStoredUpdateTimeAndKeepsItWhenAWriteFails() = runTest {
+        val repo = FakeTaskRepository()
+        val id = repo.create(TaskContent(title = "Timestamp")).id
+        val vm = model(repo)
+        vm.openDetail(id)
+        runCurrent()
+        val before = requireNotNull(repo.getStoredTask(id)).localUpdatedAt
+        assertEquals(before, vm.flowState.value.detail.localUpdatedAt)
+        repo.updateContent(id, TaskContent(title = "Changed elsewhere"))
+        runCurrent()
+        val after = requireNotNull(repo.getStoredTask(id)).localUpdatedAt
+        assertNotEquals(before, after)
+        assertEquals(after, vm.flowState.value.detail.localUpdatedAt)
+        repo.failWrite = true
+        vm.toggleCompleted(id)
+        runCurrent()
+        assertEquals(after, vm.flowState.value.detail.localUpdatedAt)
+        assertEquals("Changed elsewhere", vm.flowState.value.detail.item?.task?.title)
+        assertTrue(vm.flowState.value.detail.hasWriteError)
+        assertFalse(requireNotNull(repo.getStoredTask(id)).task.isCompleted)
+    }
 }

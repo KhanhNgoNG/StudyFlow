@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_greeting">Chào bạn!</string>
+    <string name="home_empty_body">Thêm công việc đầu tiên để theo dõi lịch học và tiến độ của bạn.</string>
+    <string name="home_progress_title">Tiến độ hôm nay</string>
+    <string name="home_no_due_today">Hôm nay chưa có công việc đến hạn.</string>
+    <string name="home_overdue_title">Công việc quá hạn</string>
+    <string name="home_upcoming_title">Sắp đến hạn</string>
+    <string name="home_no_overdue">Không có công việc chưa hoàn thành nào quá hạn.</string>
+    <string name="home_no_upcoming">Không có công việc chưa hoàn thành nào có hạn từ hôm nay trở đi.</string>
+    <string name="home_view_all">Xem tất cả</string>
+    <string name="home_view_all_description">Xem tất cả: %1$s</string>
+    <string name="tasks_date_before_today">Hạn trước hôm nay</string>
+    <string name="tasks_date_from_today">Hạn từ hôm nay</string>
+    <string name="sync_not_connected">Chưa kết nối máy chủ</string>
+    <string name="sync_explanation">Công việc được lưu cục bộ. Đồng bộ giữa các thiết bị sẽ hoạt động khi ứng dụng được bổ sung cơ chế đồng bộ và kết nối máy chủ.</string>
+    <string name="sync_pending_count">Số công việc đang chờ: %1$d</string>
+    <string name="sync_pending_deleted">Trong đó có %1$d công việc đã xóa đang chờ gửi.</string>
+    <string name="sync_last_never">Lần đồng bộ gần nhất: Chưa có</string>
+    <string name="sync_now">Đồng bộ ngay</string>
+    <string name="sync_disabled_reason">Nút hiện bị vô hiệu hóa vì chưa có cơ chế đồng bộ và chưa kết nối máy chủ.</string>
+</resources>
