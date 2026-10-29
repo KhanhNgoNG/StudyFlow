@@ -15,7 +15,7 @@ StudyFlow là ứng dụng Android quản lý công việc học tập cho bài 
 1. Đọc hướng dẫn trong phạm vi thư mục đang sửa và kiểm tra trạng thái Git.
 2. Đọc `contracts/sync-protocol.md` khi thay đổi dữ liệu, API hoặc đồng bộ. Đây là hợp đồng chung Android và backend.
 3. Kiểm tra mã nguồn, cấu hình và tài liệu đã có trước khi tạo project hoặc thêm dependency.
-4. Nếu có `docs/design/`, xem đặc tả và ảnh liên quan. Đặc tả hành vi và quyết định của người dùng ưu tiên hơn chi tiết minh họa trong ảnh concept.
+4. Trước khi tạo hoặc sửa giao diện, đọc `docs/design/ui-spec.md` và mở xem ảnh `docs/design/mockups/studyflow-concept.png`. Bám sát bố cục và phong cách của màn hình tương ứng; đặc tả hành vi và quyết định của người dùng ưu tiên hơn chi tiết minh họa trong ảnh concept. Màn hình chưa có ảnh riêng phải theo theme chung, không tự coi thiết kế mới là mẫu đã duyệt.
 5. Giữ nguyên thay đổi của người khác. Không tạo project lồng, reset hoặc ghi đè phần không thuộc nhiệm vụ.
 
 ## Cấu trúc repo

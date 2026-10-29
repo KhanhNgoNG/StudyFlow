@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_demo_title">Xem giao diện minh họa</string>
+    <string name="ui_demo_notice">MINH HỌA · Chỉ có trong debug. Dữ liệu Room trong bộ nhớ riêng; không đọc hoặc sửa công việc thật.</string>
+    <string name="ui_demo_home">Mở Trang chủ thử nghiệm</string>
+    <string name="ui_demo_seed">Tạo dữ liệu thử hôm qua / hôm nay / ngày mai</string>
+    <string name="ui_demo_seeded">Đã tạo dữ liệu thử riêng</string>
+    <string name="ui_demo_edit_edit">Minh họa xung đột sửa–sửa</string>
+    <string name="ui_demo_delete_edit">Minh họa xung đột xóa–sửa</string>
+    <string name="ui_demo_long">Minh họa nội dung dài</string>
+    <string name="ui_demo_close">Đóng minh họa</string>
+    <string name="ui_demo_selected">Đã nhận lựa chọn minh họa; không ghi Room hoặc gửi máy chủ.</string>
+    <string name="ui_demo_device_title">Hoàn thiện bài tập Mobile</string>
+    <string name="ui_demo_server_title">Nộp bài tập Mobile</string>
+    <string name="ui_demo_device_description">Kiểm tra màn hình và ghi lại kết quả thử nghiệm trên thiết bị.</string>
+    <string name="ui_demo_server_description">Bổ sung báo cáo và gửi bài trước hạn.</string>
+    <string name="ui_demo_yesterday">Thử nghiệm: quá hạn hôm qua</string>
+    <string name="ui_demo_today">Thử nghiệm: đến hạn hôm nay</string>
+    <string name="ui_demo_tomorrow">Thử nghiệm: đến hạn ngày mai</string>
+    <string name="ui_demo_undated">Thử nghiệm: chưa có deadline</string>
+</resources>

@@ -1,0 +1,371 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "cc7a55c12b999e09d1b1299095978894",
+    "entities": [
+      {
+        "tableName": "tasks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `subjectCode` TEXT NOT NULL, `dueDate` TEXT, `priority` TEXT NOT NULL, `isCompleted` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `baseVersion` INTEGER NOT NULL, `localRevision` INTEGER NOT NULL, `localUpdatedAt` INTEGER NOT NULL, `syncState` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subjectCode",
+            "columnName": "subjectCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dueDate",
+            "columnName": "dueDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "priority",
+            "columnName": "priority",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isCompleted",
+            "columnName": "isCompleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "isDeleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "baseVersion",
+            "columnName": "baseVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localRevision",
+            "columnName": "localRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localUpdatedAt",
+            "columnName": "localUpdatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncState",
+            "columnName": "syncState",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "sync_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `mutationId` TEXT NOT NULL, `operation` TEXT NOT NULL, `baseVersion` INTEGER NOT NULL, `localRevision` INTEGER NOT NULL, `state` TEXT NOT NULL, `attempts` INTEGER NOT NULL, `lastError` TEXT, `retryNotBefore` INTEGER, `snapshot_id` TEXT NOT NULL, `snapshot_title` TEXT NOT NULL, `snapshot_description` TEXT NOT NULL, `snapshot_subjectCode` TEXT NOT NULL, `snapshot_dueDate` TEXT, `snapshot_priority` TEXT NOT NULL, `snapshot_completed` INTEGER NOT NULL, `snapshot_isDeleted` INTEGER NOT NULL, PRIMARY KEY(`taskId`))",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mutationId",
+            "columnName": "mutationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operation",
+            "columnName": "operation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "baseVersion",
+            "columnName": "baseVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localRevision",
+            "columnName": "localRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "retryNotBefore",
+            "columnName": "retryNotBefore",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "snapshot.id",
+            "columnName": "snapshot_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshot.title",
+            "columnName": "snapshot_title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshot.description",
+            "columnName": "snapshot_description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshot.subjectCode",
+            "columnName": "snapshot_subjectCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshot.dueDate",
+            "columnName": "snapshot_dueDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "snapshot.priority",
+            "columnName": "snapshot_priority",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshot.completed",
+            "columnName": "snapshot_completed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshot.isDeleted",
+            "columnName": "snapshot_isDeleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sync_outbox_mutationId",
+            "unique": true,
+            "columnNames": [
+              "mutationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_sync_outbox_mutationId` ON `${TABLE_NAME}` (`mutationId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sync_conflicts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `localBaseVersion` INTEGER NOT NULL, `localRevision` INTEGER NOT NULL, `localUpdatedAt` INTEGER NOT NULL, `localPending` INTEGER NOT NULL, `mutationId` TEXT, `local_id` TEXT NOT NULL, `local_title` TEXT NOT NULL, `local_description` TEXT NOT NULL, `local_subjectCode` TEXT NOT NULL, `local_dueDate` TEXT, `local_priority` TEXT NOT NULL, `local_completed` INTEGER NOT NULL, `local_isDeleted` INTEGER NOT NULL, `server_id` TEXT NOT NULL, `server_title` TEXT NOT NULL, `server_description` TEXT NOT NULL, `server_subjectCode` TEXT NOT NULL, `server_dueDate` TEXT, `server_priority` TEXT NOT NULL, `server_completed` INTEGER NOT NULL, `server_isDeleted` INTEGER NOT NULL, `server_version` INTEGER NOT NULL, `server_serverUpdatedAt` TEXT NOT NULL, PRIMARY KEY(`taskId`))",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localBaseVersion",
+            "columnName": "localBaseVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localRevision",
+            "columnName": "localRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localUpdatedAt",
+            "columnName": "localUpdatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localPending",
+            "columnName": "localPending",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mutationId",
+            "columnName": "mutationId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "local.id",
+            "columnName": "local_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "local.title",
+            "columnName": "local_title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "local.description",
+            "columnName": "local_description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "local.subjectCode",
+            "columnName": "local_subjectCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "local.dueDate",
+            "columnName": "local_dueDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "local.priority",
+            "columnName": "local_priority",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "local.completed",
+            "columnName": "local_completed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "local.isDeleted",
+            "columnName": "local_isDeleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server.id",
+            "columnName": "server_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server.title",
+            "columnName": "server_title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server.description",
+            "columnName": "server_description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server.subjectCode",
+            "columnName": "server_subjectCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server.dueDate",
+            "columnName": "server_dueDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "server.priority",
+            "columnName": "server_priority",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server.completed",
+            "columnName": "server_completed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server.isDeleted",
+            "columnName": "server_isDeleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server.version",
+            "columnName": "server_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server.serverUpdatedAt",
+            "columnName": "server_serverUpdatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cc7a55c12b999e09d1b1299095978894')"
+    ]
+  }
+}

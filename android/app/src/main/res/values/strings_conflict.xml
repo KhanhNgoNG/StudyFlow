@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="conflict_title">Xử lý xung đột</string>
+    <string name="conflict_explanation">Cùng một công việc đã thay đổi trên hai thiết bị. So sánh và chọn toàn bộ phiên bản bạn muốn giữ.</string>
+    <string name="conflict_device">Trên thiết bị này</string>
+    <string name="conflict_server">Trên máy chủ</string>
+    <string name="conflict_differences_hint">Các trường khác nhau được làm nổi bật và có nhãn “Khác nhau”. Chọn một phiên bản để tiếp tục.</string>
+    <string name="conflict_field_differs">Khác nhau</string>
+    <string name="conflict_whole_version_warning">Chọn toàn bộ một phiên bản sẽ bỏ những thay đổi chỉ có ở phiên bản còn lại. Các trường không được tự động gộp.</string>
+    <string name="conflict_keep_selected">Giữ phiên bản đã chọn</string>
+    <string name="conflict_decide_later">Quay lại, quyết định sau</string>
+    <string name="conflict_keep_task">Giữ công việc</string>
+    <string name="conflict_confirm_delete">Xác nhận xóa</string>
+    <string name="conflict_deleted">Phiên bản này đã xóa công việc</string>
+    <string name="conflict_deleted_body">Nếu giữ phiên bản đã xóa, công việc sẽ bị xóa thay vì giữ nội dung ở phía còn lại.</string>
+</resources>

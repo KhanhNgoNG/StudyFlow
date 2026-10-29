@@ -5,7 +5,6 @@
     <string name="tasks_filter_all">Tất cả</string>
     <string name="tasks_filter_incomplete">Chưa xong</string>
     <string name="tasks_filter_completed">Hoàn thành</string>
-    <string name="tasks_local_notice">Đã lưu trên thiết bị · Chưa đồng bộ máy chủ</string>
     <string name="tasks_empty_title">Chưa có công việc</string>
     <string name="tasks_empty_body">Các công việc học tập sẽ xuất hiện tại đây. Nhấn nút cộng để thêm công việc.</string>
     <string name="tasks_no_results_title">Không tìm thấy công việc</string>

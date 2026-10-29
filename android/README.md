@@ -1,14 +1,88 @@
-# StudyFlow Android — giai đoạn 3
+# StudyFlow Android — bước 5
 
 Ứng dụng Kotlin, Jetpack Compose và Material 3 với công việc được lưu bền vững bằng Room. Project nằm ngay tại thư mục `android/`, gồm một module `app`; package và application ID là `com.studyflow`.
 
+## SyncEngine, outbox và API giả có trạng thái (29/10/2026)
+
+- **Room v2:** migration `MIGRATION_1_2` giữ nguyên bảng `tasks` v1 và thêm `sync_outbox`, `sync_conflicts`; giữ cả schema JSON v1/v2, không destructive migration. Mọi chỉnh sửa cục bộ vẫn lưu task + PENDING nguyên tử. Các chỉnh sửa chưa gửi được gom trong task; khi chạy sync, engine chụp snapshot vào outbox trong transaction **trước** API. Một task có tối đa một request chưa giải quyết, có UUID, operation, baseVersion, localRevision, payload, số lần thử, trạng thái/lỗi và mốc Retry-After.
+- **SyncEngine:** gọi `suspend sync()` với `RoomSyncStore` và `TaskApi` được cung cấp rõ ràng; các engine dùng cùng instance database chia sẻ coordinator. Lượt chạy tiếp tục request cũ trước, gửi tối đa một lần/task/lượt, kiểm tra response rồi tải snapshot đầy đủ có tombstone. Không giữ transaction khi gọi API. Kết quả có runId, số xác nhận/pending/conflict và lỗi theo giai đoạn; không log mô tả task.
+- **Retry:** timeout, mất phản hồi, 5xx và response không hợp lệ giữ nguyên mutationId/request. Không có trạng thái IN_FLIGHT cần reset sau process death. Retry-After của 429 được lưu bền vững. 422 chặn cho tới khi người dùng thực sự sửa; request mới được tạo chỉ vì chỉnh sửa mới sau lỗi chắc chắn chưa commit. MUTATION_ID_REUSED/TASK_NOT_FOUND chặn và báo lỗi; không tự thay ID. CancellationException truyền lại caller. Chưa có retry tự động/WorkManager.
+- **Bảo vệ dữ liệu:** response cũ chỉ xác nhận revision đã gửi; sửa/toggle/xóa mới hơn giữ nguyên và tiếp tục pending với baseVersion vừa xác nhận. Pull không thay thế receipt của request chưa rõ kết quả; không dùng timestamp chọn bên thắng hoặc coi ID vắng mặt là xóa. Xung đột giữ hai snapshot, khóa mutation riêng task đó; các task khác tiếp tục. Cùng nội dung (hoặc cùng ý định xóa) được đối chiếu hội tụ. Chưa nối giao diện chọn phiên bản với ghi thật.
+- **Fake server:** `src/debug/.../sync/fake/StatefulFakeTaskApi.kt`, chỉ debug/test; trạng thái server và receipt trong bộ nhớ riêng, tồn tại suốt đời instance fake. Có sửa từ client khác, version, tombstone, receipt trước version/validation, từ chối ID dùng lại khác request; điều khiển timeout trước commit, mất phản hồi sau commit, 503, 422 và gate coroutine trước/sau commit. Test giữ fake khi tạo lại client/engine/database; tạo fake mới tương đương server test mới, không phải mô phỏng restart server bền vững.
+
+**Production chưa đồng bộ server thật.** Không gắn fake hoặc SyncEngine vào Application/ViewModel/nút Đồng bộ; giao diện concept và dữ liệu người dùng được giữ nguyên. Công cụ chạy bước này là test độc lập, không thêm màn hình demo. Mỗi test Room dùng database in-memory hoặc file UUID có tiền tố test và tự đóng/dọn đúng file đó; không mở `studyflow.db`.
+
+Chạy bằng Wrapper trong `android/` (cùng JBR/JVM criteria hiện có):
+
+```powershell
+.\gradlew.bat --offline --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
+$env:ANDROID_SERIAL='emulator-5556'
+.\gradlew.bat --offline --no-daemon :app:connectedDebugAndroidTest '-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true'
+```
+
+Lượt cuối: **82 unit test đạt** (36 SyncEngine mới + 46 test cũ), **23 test Room đạt** (11 mới + 12 cũ), build debug/APK test và compile release thành công; lint **0 lỗi, 8 cảnh báo hiện có**. Test thiết bị chạy trên Medium_Phone API 37; không có fake class trong output release. Kết quả, bằng chứng và giới hạn được lưu tại [báo cáo](../docs/testing/sync-engine-phase5-results.md). Bước tiếp theo là adapter Retrofit kết nối backend thật theo cùng hợp đồng; scheduler nền và luồng xác nhận xung đột thật vẫn ngoài nhiệm vụ này.
+
+## Đối chiếu giao diện tổng thể theo concept (28/10/2026)
+
+Đã mở trực tiếp cả hai ảnh trong `docs/design/mockups/` và đối chiếu ảnh chụp runtime. Trang chủ dùng thẻ tiến độ tím, nhóm quá hạn chỉ hiện khi có dữ liệu; Công việc có tìm kiếm bo tròn, chip trạng thái tím, thẻ gọn và banner số công việc chờ. Biểu mẫu thêm/sửa giữ chung một luồng, dùng ô có nhãn, menu môn học, hàng chọn/bỏ ngày, chip ưu tiên và nút **Lưu công việc** cuối biểu mẫu. Đồng bộ và xung đột dùng cùng theme; phiên bản xung đột được chọn có viền/nền tím và khác biệt có nhãn chữ.
+
+Room vẫn là nguồn chung cho công việc, tiến độ và số PENDING (gồm tombstone). Giữ nguyên CRUD, validation, no-op revision, schema, dependency/toolchain và màn hình Chi tiết đã hoàn thiện. Đã sửa lệch vị trí cuộn khi ẩn/hiện thanh tab: lưu mốc item theo key tại UI và phục hồi khi quay lại từ Chi tiết hoặc biểu mẫu; truy vấn/bộ lọc được giữ nguyên.
+
+- Wrapper: `:app:assembleDebug` thành công; **46 unit test đạt**, **12 test Room đạt** trên Medium_Phone API 37; lint **0 lỗi, 8 cảnh báo cấu hình/phiên bản hiện có**. Manifest release không chứa UiDemoActivity hoặc quyền Internet.
+- Runtime: dữ liệu rỗng; hôm qua/hôm nay/ngày mai; Trang chủ → Chi tiết → sửa/hoàn thành → Back; checkbox độc lập với mở Chi tiết; tìm kiếm trim/không phân biệt hoa thường kết hợp trạng thái; giữ bộ lọc và mốc cuộn; thêm/sửa, lỗi tiêu đề bắt buộc, chọn môn/ngày/ưu tiên, lưu và xác nhận bỏ bản nháp; xóa logic vẫn được đếm pending. Xung đột chưa chọn/đã chọn và xóa–sửa không ghi Room. Đã kiểm tra bàn phím, chiều rộng **320 dp**, cỡ chữ **200%** và nội dung dài.
+- Mọi thao tác ghi thử dùng harness debug với **Room in-memory riêng**, không xóa hoặc seed database người dùng. Ảnh có banner MINH HỌA của harness; app thật không có banner này. Kích thước/cỡ chữ AVD được khôi phục sau kiểm tra.
+
+Ảnh và XML đối chiếu nằm trong `app/build/verification/ui-concept/` (Git bỏ qua): `home-final-apk.png`, `tasks.png`, `editor-save.png`, `sync.png`, `conflict.png`, các biến thể chọn/xóa–sửa/nội dung dài, `*-narrow-large-final.png` và `scroll-final-*.png`. Các ảnh đã được mở xem để kiểm tra thứ bậc, màu, khoảng cách, độ cao thẻ, chip/nút và nội dung cuộn.
+
+Khác concept có chủ ý: lời chào chung, ngày/số liệu thực; banner ghi **Chưa kết nối máy chủ**, không giả trạng thái mạng; thông tin lưu cục bộ yêu cầu bấm Lưu; xung đột so sánh đủ 6 trường và **không chọn sẵn**. Đồng bộ chưa có cơ chế mạng, nút bị khóa kèm lý do; xung đột chỉ là UI/demo debug. Không triển khai SyncEngine/outbox/API hoặc sửa DOCX/`contracts/`; chưa commit/push. Không có phần triển khai UI bị chặn; chưa kiểm tra TalkBack, thiết bị vật lý/API 26 hoặc render riêng từng Preview trong Android Studio.
+
+## Chi tiết công việc theo concept (28/10/2026)
+
+- Đã chỉnh **màn hình Chi tiết hiện có** theo `docs/design/mockups/studyflow-task-detail.png`: header quay lại/sửa, chip chờ đồng bộ, tiêu đề và chip môn học/hoàn thành, mô tả có viền, thẻ deadline/ưu tiên, thời điểm cập nhật, nút hoàn thành → sửa → xóa và thông tin lưu cục bộ. Icon sửa và nút Sửa dùng cùng callback/biểu mẫu; thanh tab vẫn ẩn.
+- Tiếp tục đọc task theo ID từ Room. Chỉ đưa `LocalTask.localUpdatedAt` hiện có vào `TaskDetailUiState`, định dạng theo múi giờ thiết bị và làm mới zone khi resume; không sinh timestamp để hiển thị. Giữ Entity/model nghiệp vụ, schema, repository ghi dữ liệu, dependency, toolchain và hợp đồng API.
+- Nội dung/nút cuộn được; header tự tăng chiều cao khi chữ lớn, không ép tiêu đề task xuống dòng theo ảnh. Màu/chip/icon dùng theme; trạng thái và quá hạn có nhãn chữ. Lỗi ghi vẫn giữ nội dung; xóa vẫn cần xác nhận tên công việc.
+- Có 5 Preview debug trong `ui/taskdetail/TaskDetailPreviews.kt`: chưa hoàn thành, đã hoàn thành, nội dung dài/chữ lớn, không deadline/mô tả và quá hạn. Preview chỉ dựng UiState, không gọi repository/DAO. Nút “Tạo dữ liệu thử Chi tiết công việc” trong harness debug hiện có tạo fixture riêng trong **Room in-memory**, không mở hoặc ghi `studyflow.db`.
+
+Kiểm tra bằng Wrapper: `:app:assembleDebug` thành công; `:app:testDebugUnitTest` **46 test đạt**, gồm ca mới kiểm tra timestamp từ repository và giữ dữ liệu/timestamp khi ghi thất bại; `:app:connectedDebugAndroidTest` **12 test Room đạt**; `:app:lintDebug` **0 lỗi, 8 cảnh báo** về cấu hình/phiên bản hiện có. `git diff --check` sạch.
+
+Runtime trên Medium_Phone API 37 với Room thử riêng: mở từ Trang chủ/danh sách; sửa qua icon header và nút trong nội dung; lưu và Back giữ đúng nơi mở/bộ lọc; hoàn thành/mở lại; quá hạn biến mất khi hoàn thành; không deadline/mô tả; hủy/xác nhận xóa. Sau xóa trở lại danh sách, không còn route Chi tiết task đã xóa. Đã thử nội dung dài và nhóm nút ở **320 dp, font_scale=2.0**, mở xem ảnh để đối chiếu concept; khôi phục kích thước/cỡ chữ ban đầu. Ảnh/XML local ở `app/build/verification/task-detail-*` (Git bỏ qua).
+
+Khác concept có chủ đích: môn học dùng tên từ mã hiện có (“Lập trình di động”); dữ liệu/ngày giờ là dữ liệu đang đọc; tiêu đề/header xuống dòng theo chiều rộng và cỡ chữ. Banner “MINH HỌA” trong ảnh test thuộc harness debug, không xuất hiện ở app thật. Chưa chạy TalkBack, thiết bị vật lý/API 26 hoặc render từng Preview riêng trong Android Studio; không có phần triển khai bị chặn. Không sửa DOCX hoặc `contracts/`, chưa commit/push.
+
+## Hoàn thiện giao diện bước 3
+
+- **Trang chủ** là tab mở đầu, hiển thị StudyFlow, lời chào và ngày theo locale/múi giờ thiết bị. Dữ liệu lấy từ cùng repository/Room với Công việc, không seed hoặc giữ một danh sách mutable riêng.
+- **Tiến độ hôm nay** chỉ tính công việc chưa xóa có deadline đúng hôm nay; số hoàn thành nằm trong chính tập đó. Khi không có deadline hôm nay, hiển thị thông điệp thay cho tỷ lệ 100%.
+- **Quá hạn / Sắp đến hạn** chỉ gồm công việc chưa hoàn thành, chưa xóa, có deadline trước hôm nay / từ hôm nay trở đi. Mỗi nhóm tối đa 3 mục, sắp deadline tăng dần → HIGH/MEDIUM/LOW → ID. Bấm thẻ mở chi tiết hiện có theo ID; sửa, hoàn thành/mở lại hoặc xóa phản ánh lại từ Room. Back từ chi tiết trở về tab đã mở nó.
+- **Xem tất cả** dùng lại tab Công việc: thay truy vấn cũ bằng truy vấn rỗng, Chưa xong và điều kiện ngày tương ứng. Chip “Hạn trước hôm nay” / “Hạn từ hôm nay” thể hiện điều kiện. Bấm chip hoặc “Xóa tìm kiếm và bộ lọc” bỏ toàn bộ điều kiện để xem tất cả. Danh sách được đưa về đầu khi mở từ Trang chủ.
+- Loading lần đầu, lỗi đọc có Thử lại và dữ liệu thực sự rỗng là ba trạng thái riêng. Room phát cập nhật không bật loading lại. Ngày hiện tại được cập nhật bởi `MainActivity.onResume()` (và Activity minh họa), không có vòng lặp kiểm tra thời gian nền.
+- **Đồng bộ** chỉ hiển thị trạng thái cục bộ: “Chưa kết nối máy chủ”, số **công việc** PENDING và “Lần đồng bộ gần nhất: Chưa có”. Số này tính cả tombstone PENDING, có chú thích số công việc đã xóa đang chờ gửi. Nút Đồng bộ ngay bị vô hiệu hóa kèm lý do bằng chữ. Không có gửi giả, timestamp giả hoặc chuyển PENDING thành SYNCED.
+- **Xử lý xung đột** là composable thuần nhận `ConflictUiState` và callback. So sánh 6 trường, đánh dấu khác biệt bằng màu và chữ “Khác nhau”, chọn loại trừ nhau và không chọn sẵn. Nút xác nhận chỉ bật sau khi chọn; có cảnh báo bỏ thay đổi ở bản còn lại và có thể quay lại. Xóa–sửa dùng trạng thái Deleted riêng với “Giữ công việc” / “Xác nhận xóa”. Chưa có phát hiện hoặc giải quyết xung đột thực tế.
+
+`observeStoredTasks()` đọc cả bản ghi đã xóa để tổng hợp metadata; mọi danh sách hoạt động đều loại chúng. Không đổi schema Room v1, dependency, toolchain, quyền mạng hoặc `contracts/`. Chưa thêm SyncEngine, outbox, API, Retrofit hay WorkManager.
+
+### Preview và chạy thử bằng dữ liệu riêng
+
+Các Preview trong `src/debug/java/com/studyflow/ui/conflict/ConflictPreviews.kt` có sửa–sửa chưa chọn/đã chọn, xóa–sửa chưa chọn/đã chọn và nội dung dài với fontScale 2. Chúng dùng dữ liệu minh họa trong debug resources.
+
+APK debug còn có Activity **“Xem giao diện minh họa”**, chỉ mở bằng lệnh bên dưới; không có entry hoặc badge xung đột trong luồng sử dụng chính. Activity dùng Room **in-memory** riêng, ban đầu rỗng, có nút tạo dữ liệu hôm qua/hôm nay/ngày mai/không deadline. Có thể thử thêm/sửa/hoàn thành/lọc ở đó. Nút giữ phiên bản xung đột chỉ xác nhận lựa chọn minh họa, không ghi Room hoặc gửi máy chủ. Đóng process làm mất dữ liệu thử; database `studyflow.db` không được mở bởi harness này.
+
+```powershell
+adb -s emulator-5556 shell am start -n com.studyflow/.ui.demo.UiDemoActivity
+```
+
+`UiDemoActivity`, manifest entry, fixtures và Preview nằm hoàn toàn trong `src/debug/`, không được đóng gói vào release. Không dùng `pm clear` hoặc uninstall để thử trạng thái rỗng của app thật.
+
 ## Mở project và chuẩn bị môi trường
 
-Trong Android Studio, chọn **Open** và mở thư mục `StudyFlow/android/` có tệp `settings.gradle.kts`. Chọn Gradle JDK 17 trong phần cài đặt Gradle, rồi đồng bộ project. Dùng bản Android Studio hỗ trợ AGP 9.4.
+Trong Android Studio, chọn **Open** và mở thư mục `StudyFlow/android/` có tệp `settings.gradle.kts`, giữ cấu hình JVM hiện có rồi đồng bộ project. Dùng bản Android Studio hỗ trợ AGP 9.4.
+
+Checkout hiện có cấu hình Daemon JVM criteria cho **JetBrains JBR 25** trong `gradle/gradle-daemon-jvm.properties`; giữ nguyên cấu hình đã build được này. JVM target của mã vẫn là 17. Các ví dụ `JAVA_HOME` bên dưới chọn JVM chạy Wrapper; Gradle có thể dùng daemon theo criteria đã lưu.
 
 | Thành phần | Phiên bản cấu hình |
 | --- | --- |
-| JDK / JVM target | 17 |
+| JVM chạy Wrapper / JVM target của mã | 17 |
+| Daemon JVM criteria hiện có | JetBrains JBR 25 |
 | Gradle Wrapper | 9.6.0 |
 | Android Gradle Plugin | 9.4.1 |
 | Kotlin / Compose compiler | 2.2.10; AGP cung cấp Kotlin tích hợp |
@@ -137,7 +211,7 @@ Room suspend/Flow tự điều phối truy vấn; không dùng `allowMainThreadQ
 
 Câu UPDATE chỉ tác động `isDeleted=0`. So sánh nội dung/ngày nullable ngay trong SQL loại no-op; đặt hoàn thành về cùng giá trị cũng không đổi revision, timestamp hoặc sync state. Số hàng cập nhật được đối chiếu trong transaction để phân biệt thành công/không đổi với ID thiếu/đã xóa. Xóa chỉ đặt `isDeleted=true`, không gọi DELETE vật lý.
 
-`contracts/sync-protocol.md` hiện vẫn là placeholder: chưa thống nhất wire format, kiểu phiên bản server, receipt hoặc mutation. Các tên và kiểu trên là thiết kế **cục bộ**, chưa phải giao thức backend. Chưa tạo DTO mạng, mutationId, outbox, SyncEngine, Retrofit, WorkManager hoặc giải quyết xung đột.
+Các tên và kiểu metadata trên là thiết kế **cục bộ**, chưa phải wire format backend. Hợp đồng API đã được chuyển riêng cho người làm backend; nhiệm vụ giao diện này không sửa hoặc bổ sung `contracts/`, và placeholder trong checkout không cản phần giao diện. Chưa tạo DTO mạng, mutationId, outbox, SyncEngine, Retrofit, WorkManager hoặc giải quyết xung đột thực tế.
 
 Room 2.8.4 và KSP2 2.3.10 được chọn phù hợp Kotlin/AGP hiện có và cache của môi trường; không đổi Gradle/AGP/Kotlin/Compose. Đã đối chiếu [hướng dẫn Room/KSP và schema](https://developer.android.com/jetpack/androidx/releases/room), [KSP 2.3.10](https://github.com/google/ksp/releases/tag/2.3.10) và [Kotlin tích hợp của AGP](https://developer.android.com/build/migrate-to-built-in-kotlin). Schema dùng KSP `CommandLineArgumentProvider` với thư mục output được Gradle theo dõi, không cần thêm Room Gradle plugin chỉ để cấu hình đường dẫn.
 
@@ -167,7 +241,40 @@ Instrumented test dùng Room thật: database in-memory và file riêng có tên
 
 Công việc đã lưu tồn tại sau khi Activity/ViewModel hoặc process được tạo lại và sau khởi động thiết bị. Gỡ ứng dụng/xóa dữ liệu sẽ xóa database. Chưa có đồng bộ server hoặc bản sao giữa thiết bị; nhãn Chờ đồng bộ phản ánh dữ liệu cục bộ đang chờ bước đồng bộ trong tương lai.
 
-## Kiểm tra thực tế
+## Kiểm tra phần giao diện bổ sung (28/10/2026)
+
+Giữ nguyên dependency/toolchain hiện có, dùng Wrapper offline và daemon theo JVM criteria đã lưu:
+
+| Lệnh | Kết quả thực tế |
+| --- | --- |
+| `:app:assembleDebug` | Thành công trên mã mới nhất |
+| `:app:testDebugUnitTest` | 45 test đạt, 0 lỗi/thất bại/bỏ qua; gồm 11 test mới về Trang chủ/bộ lọc/metadata và 3 test model trình bày xung đột |
+| `:app:connectedDebugAndroidTest` | 12 test Room đạt trên Medium_Phone API 37, 0 lỗi/thất bại/bỏ qua; thêm ca đếm tombstone từ stored Flow |
+| `:app:lintDebug` | Thành công, 0 lỗi và 9 cảnh báo cấu hình/phiên bản hiện có |
+| `:app:processReleaseMainManifest` | Thành công; manifest release không có UiDemoActivity hoặc quyền Internet |
+
+Ngày kiểm thử logic được cố định ở 28/10/2026 và chủ động chuyển sang hôm sau; không phụ thuộc ngày chạy test. Có ca kiểm tra tiến độ đúng tập hôm nay, hoàn thành/mở lại, tổng bằng 0, ranh giới ngày, task không deadline, task hoàn thành/đã xóa, giới hạn/thứ tự nhóm, pending tính theo bản ghi, truy vấn cũ, bỏ bộ lọc, cập nhật Room và loading/lỗi/retry. Test Room dùng file test hoặc database trong bộ nhớ riêng.
+
+Rà soát UX theo `android-ux`: dùng token màu/typography/shape hiện có, component Material 3, action tối thiểu 48 dp, tiêu đề section có heading, nội dung cuộn và khác biệt có nhãn chữ. Theme sáng tĩnh được giữ theo yêu cầu; không thêm dynamic color, dark mode hoặc animation. Body giới hạn 840 dp; chưa bổ sung rail/foldable riêng ngoài phạm vi hiện tại.
+
+Kiểm tra runtime trên APK mới nhất, Medium_Phone / emulator-5556, bằng **UiDemoActivity với Room in-memory riêng**:
+
+- [x] Trang chủ ban đầu rỗng, có hướng dẫn tạo và thông điệp không có deadline hôm nay.
+- [x] Tạo 4 task thử qua repository: hôm qua, hôm nay, ngày mai và không deadline; Trang chủ có đúng nhóm và tiến độ 0/1.
+- [x] “Xem tất cả” của nhóm quá hạn mở Công việc với Chưa xong + chip hạn trước hôm nay; bỏ điều kiện hoạt động.
+- [x] Mở chi tiết từ Trang chủ, sửa tên rồi Back về đúng Trang chủ; tên phản ánh dữ liệu đã lưu. Hoàn thành task hôm nay từ chi tiết rồi Back: tiến độ đổi 1/1.
+- [x] Xóa logic một task thử: Đồng bộ vẫn đếm 4 bản ghi PENDING và chú thích 1 công việc đã xóa; nút Đồng bộ ngay có enabled=false trong cây accessibility.
+- [x] Sửa–sửa hiển thị khác biệt; nút giữ phiên bản có enabled=false lúc chưa chọn và true sau khi chọn. Bấm xác nhận chỉ cập nhật thông báo minh họa.
+- [x] Xóa–sửa hiển thị Deleted riêng và hai lựa chọn giữ/xóa. Sau thử giao diện xung đột, dữ liệu thử vẫn là tiến độ 1/1, pending 4, tombstone pending 1.
+- [x] Nội dung dài cuộn được; chụp/đối chiếu Trang chủ, Đồng bộ và xung đột với font_scale=2.0. Đã khôi phục font_scale=1.0 ban đầu.
+
+Ảnh và XML thực tế ở `app/build/verification/home-sync-*` (Git bỏ qua). Phiên cập nhật APK trên AVD từng bị Package Manager giữ pending; khởi động lại AVD rồi cài `--no-streaming -r` thành công, giữ userdata. Không tải SDK/system image, không clear data hoặc uninstall. Các test dữ liệu dùng Room riêng; app thật không nhận fixture minh họa.
+
+Sau kiểm tra đã đóng harness (giải phóng Room in-memory), khôi phục cỡ chữ và mở `MainActivity` thật. Trang chủ hiển thị, không có AndroidRuntime error của tiến trình app trong lần kiểm tra cuối; giữ giả lập mở để sử dụng.
+
+Giới hạn: chưa chạy trên thiết bị vật lý/API 26, TalkBack hoặc màn hình gập/tablet. Preview đã được compile trong debug và composable được thử qua harness; chưa render từng Preview riêng trong Android Studio. Ngày đổi được kiểm tra bằng provider cố định trong unit test, chưa đổi ngày/múi giờ hệ thống của giả lập. Đồng bộ và giải quyết xung đột thật vẫn chưa được triển khai theo phạm vi nhiệm vụ.
+
+## Kiểm tra Room đã thực hiện trước phần giao diện bổ sung
 
 Ngày 28/10/2026, dùng Wrapper và JBR 17:
 
@@ -201,8 +308,8 @@ Không dùng `pm clear`, uninstall hoặc xóa database production để kiểm 
 
 AVD có lần boot rất chậm và System UI hiện ANR. Đã khởi động lạnh lại AVD hiện có bằng `-no-snapshot-load -no-snapshot-save -feature -Vulkan -memory 3072`, giữ nguyên userdata, rồi chọn Wait ở hộp thoại System UI. Sau đó hoàn tất các kiểm tra trên; Wi-Fi/dữ liệu được khôi phục trước khi đóng emulator do phiên này khởi động. Không tải SDK/system image mới.
 
-Chưa kiểm tra thiết bị vật lý, runtime API 26, TalkBack hoặc reboot thiết bị sau khi lưu. Bản nháp chưa lưu không được bảo đảm qua process death. Chưa có đồng bộ server; hợp đồng vẫn cần chốt trước giai đoạn SyncEngine.
+Chưa kiểm tra thiết bị vật lý, runtime API 26, TalkBack hoặc reboot thiết bị sau khi lưu. Bản nháp chưa lưu không được bảo đảm qua process death. Chưa có đồng bộ server.
 
 ## Bước tiếp theo
 
-SyncEngine với API giả và outbox, sau khi chốt phần hợp đồng còn thiếu. Giai đoạn này dừng ở Room, chưa triển khai API, WorkManager hoặc đồng bộ.
+Adapter Retrofit kết nối backend thật theo cùng hợp đồng. SyncEngine/outbox và fake có trạng thái đã được triển khai ở bước 5; production vẫn chưa gọi server. WorkManager và luồng xác nhận xung đột thật cần nhiệm vụ tiếp theo.

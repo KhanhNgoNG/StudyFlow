@@ -19,13 +19,16 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -38,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.studyflow.R
 import com.studyflow.ui.components.TaskCard
+import com.studyflow.ui.components.LocalStatusBanner
 
 @Composable
 fun TasksScreen(
@@ -50,6 +54,8 @@ fun TasksScreen(
     onRetry: () -> Unit,
     onDismissWriteError: () -> Unit,
     listState: LazyListState,
+    pendingCount: Int?,
+    onOpenSync: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
@@ -62,7 +68,7 @@ fun TasksScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "search", contentType = "search") {
-            OutlinedTextField(
+            TextField(
                 value = state.query,
                 onValueChange = onQueryChange,
                 modifier = Modifier.fillMaxWidth(),
@@ -83,7 +89,12 @@ fun TasksScreen(
                     null
                 },
                 singleLine = true,
-                shape = MaterialTheme.shapes.large,
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
             )
@@ -99,17 +110,37 @@ fun TasksScreen(
                         onClick = { onFilterChange(filter) },
                         label = { Text(stringResource(filter.labelResource())) },
                         modifier = Modifier.heightIn(min = 48.dp),
-                        shape = MaterialTheme.shapes.medium,
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ),
                     )
                 }
             }
         }
-        item(key = "demo_notice", contentType = "notice") {
-            Text(
-                text = stringResource(R.string.tasks_local_notice),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        if (state.dateFilter != TaskDateFilter.ANY) {
+            item(key = "date_filter") {
+                Column {
+                    FilterChip(
+                        selected = true, onClick = onClearConditions,
+                        label = { Text(stringResource(if (state.dateFilter == TaskDateFilter.BEFORE_TODAY) {
+                            R.string.tasks_date_before_today
+                        } else R.string.tasks_date_from_today)) },
+                        trailingIcon = { Icon(painterResource(R.drawable.ic_task_close), null) },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    )
+                    TextButton(onClick = onClearConditions, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.tasks_clear_conditions))
+                    }
+                }
+            }
+        }
+        if (pendingCount != null) {
+            item(key = "local_status", contentType = "notice") {
+                LocalStatusBanner(pendingCount, onOpenSync, Modifier.fillMaxWidth())
+            }
         }
         if (state.hasWriteError) {
             item(key = "write_error") {

@@ -21,6 +21,9 @@ class RoomTaskRepository(
 ) : TaskRepository {
     private val dao = database.taskDao()
 
+    override fun observeStoredTasks() = dao.observeStored()
+        .map { rows -> rows.map { it.toLocalTask() } }.distinctUntilChanged().storageErrors()
+
     override fun observeActiveTasks() = dao.observeActive()
         .map { rows -> rows.map { it.toLocalTask() } }.distinctUntilChanged().storageErrors()
 
@@ -59,6 +62,8 @@ class RoomTaskRepository(
 
     private suspend fun mutate(id: String, update: suspend () -> Int): TaskWriteResult = storageCall {
         database.withTransaction {
+            // Preserve both snapshots until a future, explicit resolution flow is implemented.
+            if (database.syncDao().conflict(id) != null) return@withTransaction TaskWriteResult.Unavailable
             if (update() > 0) TaskWriteResult.Success(id, changed = true)
             else if (dao.getStoredById(id)?.isDeleted == false) TaskWriteResult.Success(id, changed = false)
             else TaskWriteResult.Unavailable

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Explicit adb/debug launch only, no entry in release or the normal task flow. -->
+    <application>
+        <activity android:name="com.studyflow.ui.demo.UiDemoActivity"
+            android:exported="true" android:label="@string/ui_demo_title" />
+    </application>
+</manifest>

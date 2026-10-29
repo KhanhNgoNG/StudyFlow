@@ -3,6 +3,7 @@ package com.studyflow.data.local.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Upsert
 import com.studyflow.data.local.entity.TaskEntity
 import com.studyflow.domain.model.SubjectCode
 import com.studyflow.domain.model.TaskPriority
@@ -11,6 +12,19 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TaskDao {
+    @Query("SELECT * FROM tasks ORDER BY id")
+    suspend fun getStored(): List<TaskEntity>
+
+    @Upsert
+    suspend fun putFromSync(task: TaskEntity)
+
+    @Query("DELETE FROM tasks WHERE id = :id")
+    suspend fun removeUnsentFromSync(id: String)
+
+    // Includes tombstones for local pending counts. Active UI lists must exclude them.
+    @Query("SELECT * FROM tasks")
+    fun observeStored(): Flow<List<TaskEntity>>
+
     @Query("SELECT * FROM tasks WHERE isDeleted = 0")
     fun observeActive(): Flow<List<TaskEntity>>
 

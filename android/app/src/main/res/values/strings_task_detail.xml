@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="task_detail_incomplete">Chưa hoàn thành</string>
+    <string name="task_detail_completed">Đã hoàn thành</string>
+    <string name="task_detail_edit">Sửa công việc</string>
+    <string name="task_detail_reopen">Mở lại công việc</string>
+    <string name="task_detail_priority">Ưu tiên</string>
+    <string name="task_detail_updated">Cập nhật: %1$s</string>
+    <string name="task_detail_updated_unknown">Cập nhật: Chưa có thông tin</string>
+    <string name="task_detail_local_pending">Đã lưu trên thiết bị · Chờ đồng bộ</string>
+    <string name="task_detail_local_synced">Đã lưu trên thiết bị · Đã đồng bộ</string>
+</resources>
