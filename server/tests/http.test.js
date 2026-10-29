@@ -137,7 +137,7 @@ test('HTTP thiếu body/header, Content-Type sai và ID PUT không khớp', asyn
 test('HTTP query: true/false, thiếu includeDeleted, lặp query và baseVersion sai', async (t) => {
   const { app } = validationApp();
   const request = await serve(t, app);
-  for (const [query, expected] of [['', {}], ['?includeDeleted=true', { includeDeleted: true }], ['?includeDeleted=false', { includeDeleted: false }]]) {
+  for (const [query, expected] of [['', { includeDeleted: true }], ['?includeDeleted=true', { includeDeleted: true }], ['?includeDeleted=false', { includeDeleted: false }]]) {
     const response = await request(`/tasks${query}`);
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), expected);
@@ -193,14 +193,14 @@ test('lỗi bất ngờ và hàng database sai trả 500 kín; log giữ vị tr
   assert.doesNotMatch(JSON.stringify(logs), /SELECT secret|internal.db|secret-payload|secret-query|secret-header/);
 });
 
-test('URL không tồn tại khác với task chưa tồn tại; app chính chưa có route CRUD', async (t) => {
+test('URL không tồn tại khác với task chưa tồn tại; app chính chưa có route ghi', async (t) => {
   const { app } = validationApp();
   const request = await serve(t, app);
   const missingTask = await request('/missing-task');
   assert.equal(missingTask.status, 404);
   assert.deepEqual(await missingTask.json(), { code: 'TASK_NOT_FOUND', message: 'Task not found', taskId: body.id });
   const production = await serve(t, createApp());
-  for (const [path, method] of [['/typo', 'GET'], ['/api/v1/tasks', 'GET'], ['/api/v1/tasks', 'POST']]) {
+  for (const [path, method] of [['/typo', 'GET'], ['/api/v1/tasks', 'POST']]) {
     const response = await production(path, { method });
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { code: 'ROUTE_NOT_FOUND', message: 'Route not found' });
@@ -215,7 +215,8 @@ test('health giữ body rỗng: 200 với schema thật, 503 khi database không
   const db = openDatabase(':memory:');
   t.after(() => { if (db.open) db.close(); });
   migrateDatabase(db);
-  const request = await serve(t, createApp({ database: db }));
+  const logger = { error() {} };
+  const request = await serve(t, createApp({ database: db, logger }));
   const healthy = await request('/api/v1/health');
   assert.equal(healthy.status, 200);
   assert.equal(await healthy.text(), '');
@@ -223,9 +224,9 @@ test('health giữ body rỗng: 200 với schema thật, 503 khi database không
   const unavailable = await request('/api/v1/health');
   assert.equal(unavailable.status, 503);
   assert.equal(await unavailable.text(), '');
-  const noDatabase = await serve(t, createApp());
+  const noDatabase = await serve(t, createApp({ logger }));
   const scaffold = await noDatabase('/api/v1/health');
-  assert.equal(scaffold.status, 200);
+  assert.equal(scaffold.status, 503);
   assert.equal(await scaffold.text(), '');
 });
 

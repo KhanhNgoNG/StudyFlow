@@ -1,7 +1,13 @@
 import { ApiError } from '../http/api-errors.js';
 
 // Transport errors below are implementation policies, not additional sync outcomes.
-function parserError(error) {
+function requestError(error) {
+  // Express's router cannot reach UUID validation if URL decoding itself fails.
+  // Recognize its precise error shape, without trusting arbitrary error.status.
+  if (error instanceof URIError && error.status === 400
+    && typeof error.message === 'string' && error.message.startsWith('Failed to decode param ')) {
+    return { status: 400, code: 'BAD_REQUEST', message: 'Invalid URL encoding' };
+  }
   switch (error?.type) {
     case 'entity.parse.failed':
       return { status: 400, code: 'INVALID_JSON', message: 'Malformed JSON body' };
@@ -18,7 +24,7 @@ function parserError(error) {
   }
 }
 
-function diagnostic(error, req) {
+export function errorDiagnostic(error, req) {
   return {
     time: new Date().toISOString(),
     method: req.method,
@@ -38,8 +44,9 @@ export function routeNotFound(req, res) {
 
 export function createErrorHandler({ logger = console } = {}) {
   return (error, req, res, next) => {
-    if (!(error instanceof ApiError) && !parserError(error)) {
-      logger.error('Unhandled request error', diagnostic(error, req));
+    const transportError = requestError(error);
+    if (!(error instanceof ApiError) && !transportError) {
+      logger.error('Unhandled request error', errorDiagnostic(error, req));
     }
     if (res.headersSent) {
       next(error);
@@ -49,7 +56,6 @@ export function createErrorHandler({ logger = console } = {}) {
       res.status(error.status).json(error.body);
       return;
     }
-    const transportError = parserError(error);
     if (transportError) {
       const { status, ...body } = transportError;
       res.status(status).json(body);

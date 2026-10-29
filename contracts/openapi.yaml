@@ -351,10 +351,15 @@ paths:
         - name: includeDeleted
           in: query
           description: >
-            Gửi true để nhận cả công việc đã xóa logic.
-            Android luôn gửi true khi đồng bộ.
+            Không truyền hoặc gửi true để nhận cả công việc đã xóa logic.
+            Gửi false để chỉ nhận công việc chưa xóa.
+            Chỉ chấp nhận một giá trị query true hoặc false;
+            giá trị khác hoặc query lặp trả 422 VALIDATION_ERROR.
+            Mặc định true được chốt tại Bước 6 ngày 29/10/2026.
+            Android vẫn luôn gửi rõ true khi đồng bộ.
           schema:
             type: boolean
+            default: true
           example: true
       responses:
         '200':
@@ -368,6 +373,9 @@ paths:
                   externalValue: ./examples/task-list.json
                 emptyList:
                   externalValue: ./examples/empty-task-list.json
+
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
 
         '429':
           $ref: '#/components/responses/TooManyRequests'

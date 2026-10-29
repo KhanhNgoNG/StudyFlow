@@ -166,12 +166,15 @@ test('DELETE chỉ chuyển chuỗi thập phân hợp lệ thành số nguyên 
   expectValidation(() => validateDeleteTaskRequest({ id: createBody.id, baseVersion: '1' }), 'Idempotency-Key');
 });
 
-test('includeDeleted vắng mặt không có default; chỉ nhận true/false dạng query', () => {
-  assert.deepEqual(validateListTasksQuery({}), {});
+test('includeDeleted mặc định true theo quyết định Bước 6; chỉ nhận true/false dạng query', () => {
+  assert.deepEqual(validateListTasksQuery({}), { includeDeleted: true });
   assert.deepEqual(validateListTasksQuery({ includeDeleted: 'true' }), { includeDeleted: true });
   assert.deepEqual(validateListTasksQuery({ includeDeleted: 'false' }), { includeDeleted: false });
   for (const includeDeleted of ['', '0', '1', 'False', 'true ', undefined, null, true, false, ['true', 'false'], {}]) {
     expectValidation(() => validateListTasksQuery({ includeDeleted }), 'includeDeleted');
+  }
+  for (const query of [{ 'includeDeleted[]': 'false' }, { 'includeDeleted[value]': 'true' }]) {
+    expectValidation(() => validateListTasksQuery(query), 'includeDeleted');
   }
 });
 

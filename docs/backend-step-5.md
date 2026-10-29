@@ -2,7 +2,7 @@
 
 ## Mục tiêu và phạm vi đã làm
 
-Bước này tạo các thành phần dùng lại để kiểm tra request, chuyển hàng SQLite thành task JSON, bọc response và xử lý lỗi Express. Không thêm dependency, SQL nghiệp vụ, migration hoặc endpoint task. App chính vẫn chỉ có `/api/v1/health`; đã gắn JSON parser và middleware lỗi chung.
+Bước này tạo các thành phần dùng lại để kiểm tra request, chuyển hàng SQLite thành task JSON, bọc response và xử lý lỗi Express. Riêng mốc Bước 5 không thêm dependency, SQL nghiệp vụ, migration hoặc endpoint task. Trong trạng thái hiện tại sau Bước 6, app chính đã có GET health/danh sách/chi tiết; POST/PUT/DELETE và service idempotency vẫn chưa triển khai. Xem [Bước 6](backend-step-6.md) về API đọc và kết quả rà soát mới nhất.
 
 Đã đọc [giao thức đồng bộ](../contracts/sync-protocol.md), [OpenAPI](../contracts/openapi.yaml), toàn bộ [JSON mẫu](../contracts/examples/README.md), [thiết kế database](database-design.md), README và mã server hiện tại trước khi sửa. Nhánh lúc bắt đầu: `codex/backend-api-contract`, working tree sạch. Không thay đổi Android hoặc các file hợp đồng đã chốt.
 
@@ -45,16 +45,16 @@ HTTP request
   → adapter validation: lấy body, params, query, Idempotency-Key
   → validator: kiểm tra, trả object mới; chỉ trim title
   → res.locals.validatedRequest
-  → xử lý nghiệp vụ / repository (CHƯA triển khai trong Bước 5)
+  → controller/repository đọc (đã có ở Bước 6; nghiệp vụ ghi chưa triển khai)
   → hàng SQLite
   → taskFromRow: kiểm tra dữ liệu + đổi tên/boolean
   → taskResponse hoặc taskListResponse
   → res.status(...).json(...)
 ```
 
-`validateCreateTaskRequest({ body, idempotencyKey })` trả `{ task, baseVersion, mutationId }`. PUT thêm `id` của đường dẫn và trả cùng cấu trúc. DELETE nhận `{ id, baseVersion, idempotencyKey }`, trong đó baseVersion đầu vào là chuỗi query; kết quả baseVersion là number. `validateTaskId(id)` dùng cho GET chi tiết. `validateListTasksQuery(query)` trả `{ includeDeleted: true/false }` hoặc `{}` nếu không gửi tham số.
+`validateCreateTaskRequest({ body, idempotencyKey })` trả `{ task, baseVersion, mutationId }`. PUT thêm `id` của đường dẫn và trả cùng cấu trúc. DELETE nhận `{ id, baseVersion, idempotencyKey }`, trong đó baseVersion đầu vào là chuỗi query; kết quả baseVersion là number. `validateTaskId(id)` dùng cho GET chi tiết. `validateListTasksQuery(query)` trả `{ includeDeleted: true/false }`; không gửi tham số trả `{ includeDeleted: true }` theo quyết định chính thức ở Bước 6.
 
-Các adapter `validateCreateTask`, `validateUpdateTask`, `validateDeleteTask`, `validateGetTask`, `validateListTasks` mới được gắn vào app riêng trong `http.test.js`. Handler test trả lại dữ liệu đã kiểm tra để quan sát middleware; không lưu task và không mô phỏng CRUD trong app chính.
+Các adapter GET `validateGetTask`, `validateListTasks` đã được app chính dùng từ Bước 6. Adapter POST/PUT/DELETE mới được gắn vào app riêng trong `http.test.js`; handler test trả lại dữ liệu đã kiểm tra để quan sát middleware, không lưu task. App chính chưa có route ghi hoặc route phục vụ test.
 
 Khi làm bước receipt, **không đặt validation đầy đủ này trước việc tìm/replay receipt**. Theo hợp đồng, cần kiểm tra định danh mutation/cấu trúc cần thiết, tìm receipt và so request gốc trước version/validation nghiệp vụ: cùng mutation khác nội dung phải thành MUTATION_ID_REUSED; retry thành công phải nhận lại response cũ. Các validator không sửa `req.body`/query gốc và chưa tính hash. Chưa có scheduler, SyncEngine hoặc cơ chế idempotency mới ở backend.
 
@@ -67,14 +67,14 @@ Khi làm bước receipt, **không đặt validation đầy đủ này trước 
 - POST baseVersion là number nguyên an toàn bằng 0; PUT là number nguyên an toàn >= 1. Đây là kiểm tra cấu trúc; việc task tồn tại/version khớp vẫn thuộc service sau này.
 - ID body PUT phải khớp nguyên chuỗi ID URL. ID đường dẫn và Idempotency-Key phải là UUID dạng 8-4-4-4-12 hex; không giới hạn chỉ UUID v4, không đổi chữ hoa/thường.
 - DELETE baseVersion chỉ nhận một chuỗi không rỗng gồm chữ số ASCII, rồi kiểm tra 1–9007199254740991. Không nhận dấu, khoảng trắng, thập phân, số mũ, hậu tố, query lặp thành array hoặc số vượt giới hạn an toàn. Chuỗi `01` được hiểu là số 1; request gốc được giữ nguyên.
-- includeDeleted chỉ nhận chuỗi `true` hoặc `false`, không ép kiểu bằng Boolean. Thiếu tham số giữ kết quả `{}`.
+- includeDeleted chỉ nhận chuỗi `true` hoặc `false`, không ép kiểu bằng Boolean. Thiếu tham số mặc định true; query lặp hoặc kiểu bất thường trả 422. App đọc toàn bộ query trong giới hạn HTTP, không cắt im lặng sau 1.000 khóa khiến bỏ sót flag hoặc giá trị lặp ở cuối.
 - Validator chỉ đưa các trường nghiệp vụ vào task kết quả. version, serverUpdatedAt và metadata ngoài whitelist bị bỏ khỏi dữ liệu ghi; không bị lấy để lưu. Chưa có ghi database qua HTTP.
 
 Thông báo fieldErrors phân biệt `is required`, `must not be null`, `must be a ...` và giới hạn giá trị. Nhiều trường sai được gom trong một response. Tên trường là camelCase, header dùng khóa `Idempotency-Key`, lỗi root dùng `body`. Đây là thông báo cho lập trình viên; Android ánh xạ code/tên trường sang nhãn tiếng Việt.
 
 ## Quyết định triển khai và điểm hợp đồng chưa chốt
 
-Các chi tiết dưới đây chưa được hợp đồng hai phía mô tả đầy đủ. Chúng được ghi rõ như quyết định triển khai Bước 5; không sửa file hợp đồng và không coi đây là thỏa thuận mới đã được Android xác nhận.
+Các chi tiết Unicode và lỗi hạ tầng dưới đây được ghi rõ như quyết định triển khai Bước 5, chưa được hợp đồng mô tả đầy đủ. Riêng default includeDeleted đã được người dùng xác nhận chính thức ở Bước 6 và cập nhật hợp đồng; không còn là điểm để ngỏ.
 
 | Điểm cần làm rõ | Hành vi hiện tại và ảnh hưởng |
 |---|---|
@@ -83,7 +83,7 @@ Các chi tiết dưới đây chưa được hợp đồng hai phía mô tả đ
 | NUL / surrogate đơn trong JSON | Từ chối title/description có U+0000 hoặc surrogate không ghép cặp, trả 422 VALIDATION_ERROR. SQLite length dừng ở NUL; surrogate đơn không phải chuỗi Unicode hợp lệ cho trao đổi. Không âm thầm cắt hay thay ký tự. Đây là hạn chế dữ liệu được nêu rõ để hai phía thống nhất. |
 | Khoảng năm của YYYY-MM-DD | Nhận bốn chữ số 0000–9999 theo lịch Gregory kéo dài và tương thích SQLite, gồm năm 0000. Không tự giới hạn “ngày tương lai” hoặc lịch học. Nếu Android giới hạn khác cần chốt chung trước tích hợp. |
 | Trường lạ/server-managed do client gửi | OpenAPI không có additionalProperties=false; dùng whitelist, bỏ khỏi kết quả thay vì tự thêm quy tắc reject trường lạ. Giữ request gốc cho bước receipt. |
-| includeDeleted vắng mặt | OpenAPI không có default. Validator không chọn true/false; cần chốt hành vi endpoint GET trước khi nối truy vấn SQL. Android đồng bộ vẫn phải gửi true theo hợp đồng. |
+| includeDeleted vắng mặt — đã chốt | Mặc định true, trả cả task sống/tombstone; false chỉ trả task sống. OpenAPI có default:true; query sai/lặp trả 422. Đây là bổ sung hành vi mặc định đã được người dùng xác nhận, không đổi các quy tắc đồng bộ khác. Android vẫn gửi rõ true. |
 | Body lỗi hạ tầng | Chọn các status/code trong bảng dưới để có JSON nhất quán; chưa thêm chúng vào OpenAPI/JSON mẫu vì hợp đồng chưa chốt chi tiết này. Phía Android cần biết đây không phải các code nghiệp vụ đã thống nhất. |
 
 Quy tắc code point phù hợp với [tài liệu SQLite về length](https://www.sqlite.org/lang_corefunc.html#length); test còn chạy truy vấn length thật trên connection `:memory:`. NUL là ngoại lệ được chặn rõ ràng.
@@ -110,7 +110,7 @@ Lỗi nghiệp vụ đã có cấu trúc đúng hợp đồng:
 | Lỗi | Nội dung |
 |---|---|
 | 422 VALIDATION_ERROR | code, message, fieldErrors; taskId chỉ khi xác định được UUID. POST lấy từ body, PUT/DELETE ưu tiên đường dẫn. |
-| 404 TASK_NOT_FOUND | code, message, taskId; factory mới chuẩn bị, chưa tra cứu task qua API. |
+| 404 TASK_NOT_FOUND | code, message, taskId; GET chi tiết Bước 6 đã dùng khi UUID hợp lệ không có hàng trong database. |
 | 409 VERSION_CONFLICT | code, message, taskId, currentTask đầy đủ được mapper kiểm tra từ hàng SQLite; chưa kiểm tra version thực tế. |
 | 409 MUTATION_ID_REUSED | code, message, taskId nếu biết; chưa đọc/tạo/replay receipt. |
 
@@ -123,12 +123,13 @@ Các lỗi hạ tầng bổ sung có chủ đích, ngoài phần hợp đồng �
 | Content-Type sai ở validator POST/PUT | 415 / UNSUPPORTED_MEDIA_TYPE / Content-Type must be application/json |
 | Encoding/charset parser không hỗ trợ | 415 / UNSUPPORTED_MEDIA_TYPE / Unsupported request encoding |
 | Body bị hủy hoặc sai Content-Length do parser báo | 400 / BAD_REQUEST / Invalid request body |
+| Router không giải mã được URL | 400 / BAD_REQUEST / Invalid URL encoding |
 | URL/method không có route | 404 / ROUTE_NOT_FOUND / Route not found |
 | Lỗi bất ngờ | 500 / INTERNAL_ERROR / Internal server error |
 
 Status parser 400/413/415 theo hành vi [body-parser của Express](https://expressjs.com/en/resources/middleware/body-parser/#errors). Các **tên code và message** trong bảng là lựa chọn triển khai này. JSON hợp lệ nhưng root null/array/string/number/boolean được parser đọc với strict=false rồi validator từ chối bằng 422. Body 0 byte có thể được Express đọc thành `{}`; khi đó các trường bắt buộc đều báo thiếu, không được điền default.
 
-Không dùng TASK_NOT_FOUND cho URL sai. Vì chưa có route task trong app chính, gọi GET `/api/v1/tasks` hiện nhận 404 ROUTE_NOT_FOUND, không chứng minh ID task chưa tồn tại. Parser chạy trước route nên JSON sai cú pháp có thể trả 400 ngay cả ở URL chưa triển khai.
+Không dùng TASK_NOT_FOUND cho URL sai. GET `/api/v1/tasks` hiện đã hoạt động; URL/method chưa triển khai trả ROUTE_NOT_FOUND. ID đã giải mã nhưng không phải UUID trả 422; URL có percent encoding sai như `%ZZ` không đến được validator nên trả 400 BAD_REQUEST với message cố định. Chỉ nhận diện URIError theo shape lỗi router thực tế, không tin status tùy ý trên mọi lỗi. Parser chạy trước route nên JSON sai cú pháp có thể trả 400 ngay cả ở URL chưa triển khai.
 
 Lỗi bất ngờ không lấy status/expose/message từ lỗi thư viện để trả client; response chỉ có code/message cố định. Logger mặc định là console.error, có thể truyền logger khi tạo app. Log gồm giờ UTC, method, mẫu route, tên lỗi, mã SQLITE_/ERR_ nếu phù hợp và các vị trí trong stack. Không log body, header, query hoặc nguyên error.message có thể chứa SQL/payload. Đường dẫn ở stack phục vụ chẩn đoán tại server, không xuất hiện trong response. Không tạo file log cá nhân.
 
@@ -154,13 +155,13 @@ node --test tests/http.test.js
 node --test tests/database.test.js
 ```
 
-Kết quả mong đợi toàn bộ: `tests 56`, `pass 56`, `fail 0`, không test bị skip/cancel. Kết quả đã chạy thực tế ngày **29/10/2026**, Node **v22.14.0**, npm **11.6.4**: **56/56 đạt**, gồm 12 database + 30 validation + 4 response/factory + 10 HTTP/error middleware.
+Kết quả lịch sử của mốc Bước 5: **56/56 đạt**, gồm 12 database + 30 validation + 4 response/factory + 10 HTTP/error middleware. Khi rà soát để tách commit, ảnh chụp mốc này đã được chạy lại trong thư mục tạm và vẫn đạt 56/56. Kết quả hiện tại sau Bước 6 và sửa lỗi, ngày **29/10/2026**, Node **v22.14.0**, npm **11.6.4**: **80/80 đạt**, fail/skip/cancel đều 0. Chi tiết 24 test repository/API đọc và smoke test database tạm nằm ở [Bước 6](backend-step-6.md).
 
 Trong lần chạy ở sandbox, 9 test cần listen localhost bị EPERM, 47 test khác đạt. Sau khi được phép chạy ngoài sandbox, HTTP thật đã chạy; phát hiện và sửa kỳ vọng test body rỗng cho đúng cách Express trả `{}`. Lần chạy toàn bộ sau sửa đạt 56/56. Đây là lỗi môi trường và kỳ vọng test đã được giải quyết, không phải kết quả HTTP được giả lập.
 
 Test database cũ dùng file tạm có dọn; test mới dùng `:memory:` hoặc dữ liệu fixture. HTTP test mở port ngẫu nhiên trên loopback và tự đóng. Không ghi, inspect, reset hoặc seed lại database demo trong quá trình Bước 5.
 
-Chưa kiểm chứng API CRUD task, kiểm tra version nguyên tử, hash/receipt/retry hoặc đồng bộ Android với backend thật; chúng chưa được triển khai ở mốc này. Các nhánh parser request.aborted/request.size.invalid được xử lý nhưng chưa có test socket ngắt giữa chừng/Content-Length sai; kiểm thử HTTP hiện bao phủ JSON sai cú pháp, quá dung lượng và encoding không hỗ trợ.
+API đọc đã được kiểm chứng ở Bước 6. Chưa triển khai API ghi, kiểm tra version nguyên tử, hash/receipt/retry hoặc ghép đồng bộ Android với backend thật. Các nhánh parser request.aborted/request.size.invalid được xử lý nhưng chưa có test socket ngắt giữa chừng/Content-Length sai; HTTP đã kiểm tra JSON sai cú pháp, quá dung lượng, encoding không hỗ trợ và URL encoding sai.
 
 ## Kiểm tra Git và chuẩn bị commit
 
@@ -192,10 +193,8 @@ git diff --cached --check
 git diff --cached
 ```
 
-Commit đề xuất: `feat(server): bổ sung validation và chuẩn hóa response`. Chưa thực hiện git add/commit/push/merge/reset thay người dùng.
+Thông điệp mốc Bước 5: `feat(server): bổ sung validation và chuẩn hóa response`. Người dùng đã ủy quyền commit/push khi rà soát cả hai bước; mốc Bước 5 được tách từ ảnh chụp đã kiểm thử riêng, không reset working tree hoặc chuyển nhánh. Không merge vào main hoặc force push.
 
-## Việc tiếp theo thuộc Bước 6
+## Trạng thái sau Bước 6
 
-Chuyển sang triển khai API task thật theo phạm vi kế hoạch backend, dùng lại validator, serializer và factory lỗi này. Trước khi nối GET danh sách với SQL cần chốt includeDeleted khi vắng mặt. Khi tới bước ghi/receipt, giữ đúng thứ tự receipt trước version và transaction task + receipt của hợp đồng.
-
-Repo hiện chưa có kế hoạch Bước 6 chi tiết (`docs/project-plan.md` vẫn là TODO), nên tài liệu này không tự phân bổ toàn bộ CRUD/version/receipt vào một bước hoặc triển khai chúng trước yêu cầu tiếp theo.
+GET danh sách/chi tiết và health đã hoạt động. Default includeDeleted=true đã được xác nhận và ghi vào Sync Protocol/OpenAPI. Bước tiếp theo là phần ghi theo yêu cầu Bước 7; khi tới version/receipt, giữ đúng thứ tự receipt trước version và transaction task + receipt. Chưa triển khai phần ghi trong lần rà soát này.

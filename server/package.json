@@ -18,6 +18,7 @@
     "db:seed": "node --env-file=.env src/database/cli.js seed",
     "db:inspect": "node --env-file=.env src/database/cli.js inspect",
     "db:reset": "node --env-file=.env src/database/cli.js reset",
-    "test": "node --test"
+    "test": "node --test",
+    "test:smoke": "node scripts/smoke-read-api.js"
   }
 }

@@ -30,4 +30,6 @@ POST, PUT và DELETE cần header `Idempotency-Key` chứa UUID mutation; POST v
 
 Các file task và tombstone thuần là object để tái sử dụng. Khi giả lập HTTP response chi tiết hoặc ghi thành công, dùng file có envelope `{"task": ...}`. Danh sách đồng bộ dùng `includeDeleted=true`; tombstone trong danh sách có ID khác task sống để không lặp cùng ID trong một snapshot.
 
+Quyết định Bước 6 ngày 29/10/2026: GET danh sách không truyền includeDeleted có cùng hành vi với true, trả cả task sống và tombstone; false chỉ trả task sống. `task-list.json` minh họa kết quả của true hoặc khi không truyền tham số. Giá trị sai hoặc query includeDeleted lặp trả 422 VALIDATION_ERROR với fieldErrors.includeDeleted; cấu trúc lỗi dùng cùng schema như `error-response.json`. Android vẫn gửi rõ includeDeleted=true khi đồng bộ.
+
 Không tạo JSON request cho DELETE vì hợp đồng không yêu cầu body. Không thêm response health hoặc mã lỗi khác khi chưa có cấu trúc JSON được hợp đồng quy định.

@@ -75,6 +75,13 @@ Trạng thái đồng bộ, lỗi, số lần thử, `localRevision`, outbox và
 
 GET danh sách không phân trang trong bản đầu. Server trả dữ liệu từ một snapshot đọc nhất quán. Android luôn dùng `includeDeleted=true` khi đồng bộ.
 
+Quyết định bổ sung được người dùng chốt khi triển khai Bước 6 (29/10/2026):
+
+- Không truyền `includeDeleted` hoặc truyền `includeDeleted=true`: trả cả công việc đang hoạt động và dấu vết xóa.
+- `includeDeleted=false`: chỉ trả công việc chưa xóa (`isDeleted=false`).
+- Nếu truyền tham số, chỉ chấp nhận một giá trị chuỗi HTTP `true` hoặc `false`; giá trị khác hoặc query bị lặp trả `422 VALIDATION_ERROR` với `fieldErrors.includeDeleted`.
+- Android vẫn gửi rõ `includeDeleted=true` khi đồng bộ, không phụ thuộc vào giá trị mặc định.
+
 GET chi tiết trả `404` nếu ID chưa từng tồn tại. Công việc đã xóa logic vẫn trả object với `isDeleted=true`. Không coi việc thiếu một ID trong danh sách là bằng chứng để xóa dữ liệu cục bộ.
 
 ## 5. Request và response mẫu
@@ -328,4 +335,4 @@ Error body thông thường:
 
 **Backend:** REST API; validation; database và tombstone; kiểm tra version nguyên tử; receipt chống áp dụng trùng; response lỗi đúng hợp đồng; seed và integration test.
 
-**Cùng thực hiện:** xác nhận hợp đồng, tạo JSON mẫu, ghép thử sớm trên hai thiết bị, chạy các kịch bản của đề và ghi nhận số đo thực tế. Tài liệu này chưa phải file OpenAPI; bước tiếp theo là mô tả cùng hợp đồng bằng `contracts/openapi.yaml` khi khởi tạo mã nguồn.
+**Cùng thực hiện:** xác nhận hợp đồng, tạo JSON mẫu, ghép thử sớm trên hai thiết bị, chạy các kịch bản của đề và ghi nhận số đo thực tế. Cùng hợp đồng đã được mô tả bằng `contracts/openapi.yaml`; giữ hai tài liệu và các JSON mẫu nhất quán khi cập nhật.

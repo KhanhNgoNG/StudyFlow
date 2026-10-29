@@ -66,7 +66,12 @@ export function validateDeleteTaskRequest({ id, baseVersion, idempotencyKey }) {
 }
 
 export function validateListTasksQuery(query) {
-  if (!Object.hasOwn(query, 'includeDeleted')) return {};
+  // Express's simple query parser keeps bracket notation as literal keys.
+  // Reject it rather than mistaking includeDeleted[]=false for an omitted flag.
+  if (Object.keys(query).some((key) => key.startsWith('includeDeleted['))) {
+    throw validationError({ includeDeleted: 'Must be a single query string: true or false' });
+  }
+  if (!Object.hasOwn(query, 'includeDeleted')) return { includeDeleted: true };
   if (query.includeDeleted !== 'true' && query.includeDeleted !== 'false') {
     throw validationError({ includeDeleted: 'Must be a single query string: true or false' });
   }
