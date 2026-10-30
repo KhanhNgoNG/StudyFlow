@@ -1,6 +1,6 @@
 # StudyFlow Server
 
-Backend của StudyFlow sử dụng Node.js, JavaScript ES modules, Express 5 và SQLite qua `better-sqlite3`. Health, API đọc và POST/PUT/DELETE task đã hoạt động trong app chính. API ghi dùng lại executor mutation/receipt của Bước 7, không có luồng idempotency thứ hai. Hợp đồng chung với Android nằm trong [giao thức đồng bộ](../contracts/sync-protocol.md) và [OpenAPI](../contracts/openapi.yaml). Các hướng dẫn [Bước 4](../docs/backend-step-4.md), [Bước 5](../docs/backend-step-5.md), [Bước 6](../docs/backend-step-6.md) ghi lại từng mốc trước; xem [thiết kế database](../docs/database-design.md) và README này về hiện trạng sau Bước 8.
+Backend của StudyFlow sử dụng Node.js, JavaScript ES modules, Express 5 và SQLite qua `better-sqlite3`. Health, API đọc và POST/PUT/DELETE task đã hoạt động trong app chính. API ghi dùng lại executor mutation/receipt của Bước 7, không có luồng idempotency thứ hai. Bước 9 audit và bổ sung integration test, không thay đổi API hoặc mã production. Hợp đồng chung với Android nằm trong [giao thức đồng bộ](../contracts/sync-protocol.md) và [OpenAPI](../contracts/openapi.yaml). Các hướng dẫn [Bước 4](../docs/backend-step-4.md), [Bước 5](../docs/backend-step-5.md), [Bước 6](../docs/backend-step-6.md) ghi lại từng mốc trước; xem [thiết kế database](../docs/database-design.md), [ca kiểm thử](../docs/testing/test-cases.md) và [kết quả thực tế](../docs/testing/test-results.md) về hiện trạng.
 
 ## Yêu cầu môi trường
 
@@ -159,7 +159,10 @@ Bước 8 đã nối route/controller POST/PUT/DELETE và callback CRUD/version 
 - `tests/task-repository.test.js`, `tests/read-api.test.js`: repository và integration HTTP đọc dùng database riêng, không dùng dữ liệu demo.
 - `tests/request-fingerprint.test.js`, `mutation-executor.test.js`, `mutation-http.test.js`: canonicalization, atomicity/replay/lỗi và HTTP mất phản hồi sau commit.
 - `test-support/mutation-worker.js`: helper hai worker/connection thật để kiểm tra tranh khóa cùng mutation ID; không được app chính nạp.
-- `tests/task-write-api.test.js`: 18 test HTTP trên app chính cho CRUD/version, replay, rollback, JSON body và mất phản hồi. `tests/task-write-concurrency.test.js`, `test-support/task-write-worker.js`: hai ca cạnh tranh production service bằng hai worker, trigger/gate chỉ thuộc test.
+- `tests/task-write-api.test.js`: 18 test HTTP trên app chính cho CRUD/version, replay, rollback, JSON body và mất phản hồi. `tests/task-write-concurrency.test.js`, `test-support/task-write-worker.js`: ba ca cạnh tranh production service bằng hai worker, trigger/gate chỉ thuộc test.
+- `tests/write-http-contract.test.js`, `test-support/http-fixture.js`: HTTP production cho biên validation/Unicode, key order/kiểu trong fingerprint và receipt hỏng; mỗi test có schema SQLite mới, port động, timeout và cleanup.
+- `tests/restart-replay.test.js`, `test-support/http-process.js`: replay sau restart hai tiến trình Node độc lập, dùng cùng database file tạm. IPC chỉ báo port động và dừng đúng child do test tạo.
+- `tests/openapi.test.js`, `test-support/openapi-contract.js`: YAML, local refs, parameter, JSON mẫu và schema của HTTP thực tế. Parser `yaml` chỉ là dev dependency; evaluator giới hạn không thay validator OpenAPI chuyên dụng.
 - `scripts/smoke-read-api.js`: chạy tiến trình server thật với database tạm/cổng trống, gửi GET và tự dọn tài nguyên sau kiểm tra.
 - `.env.example`: cấu hình mẫu được lưu trong Git.
 - `package-lock.json`: khóa phiên bản dependency để cài lại bằng `npm ci`.
@@ -168,7 +171,7 @@ Bước 8 đã nối route/controller POST/PUT/DELETE và callback CRUD/version 
 
 - API đọc/ghi và replay receipt đã hoạt động trong app chính; chưa ghép Retrofit/SyncEngine Android với backend này hoặc kiểm thử đầy đủ trên hai thiết bị Android.
 - Không có phân trang, realtime, hợp nhất từng trường, lịch sử khôi phục hoặc endpoint chọn bên thắng.
-- Concurrency đã thử với hai worker/kết nối và service thật, chưa phải stress test HTTP tải lớn. Bước 9 chưa được mô tả chi tiết trong repo; không tự triển khai phần tiếp theo.
+- Concurrency đã thử với hai worker/kết nối và service thật, chưa phải stress test HTTP tải lớn. Bước 9 chỉ hoàn thiện kiểm thử backend độc lập; chưa triển khai công cụ gây lỗi Bước 10 hoặc benchmark.
 
 Các endpoint task/health trong OpenAPI hiện đã có implementation; các giới hạn kiểm chứng được ghi ở trên.
 
@@ -201,18 +204,27 @@ npm run test:smoke
 
 Không cần `.env`, migrate hoặc seed database demo để chạy test. Test dùng file SQLite tạm hoặc `:memory:`, đóng/dọn sau khi chạy. HTTP test mở port ngẫu nhiên trên `127.0.0.1` rồi đóng server; môi trường sandbox cần cho phép listen localhost.
 
-Hiện có **136 test**, toàn bộ đã chạy thật và đạt: 116 test Bước 4–7 (cập nhật kỳ vọng route ghi đã có), 18 HTTP CRUD và 2 concurrency service Bước 8. Không thêm dependency/framework. Chạy riêng từng nhóm mới bằng:
+Ngày 30/10/2026 đã chạy **147 test: 147 pass, 0 fail, 0 skip, 0 cancel**. Trước Bước 9 có 136 test; giữ lại toàn bộ và thêm 11 ca có mục đích: 4 HTTP validation/fingerprint/receipt hỏng, 1 restart/replay, 1 race cùng key khác request và 5 kiểm tra hợp đồng. Không đổi test framework hoặc dependency runtime; chỉ thêm `yaml@2.9.1` trong devDependencies/lockfile để kiểm tra YAML ngay trong `npm test`, không phụ thuộc Python của máy.
+
+Lệnh chính là `npm test` sau `cd /Users/tuankhong/Documents/StudyFlow/server`. Máy mới dùng Node `>=22.14.0 <23` theo package và chạy `npm ci` một lần để cài cả devDependencies. Test không cần `.env`, không phụ thuộc database demo hay thứ tự chạy. Chạy riêng các nhóm khi cần chẩn đoán:
 
 ```bash
 node --test tests/request-fingerprint.test.js tests/mutation-executor.test.js tests/mutation-http.test.js
 node --test tests/task-write-api.test.js tests/task-write-concurrency.test.js
+node --test tests/write-http-contract.test.js tests/restart-replay.test.js tests/openapi.test.js
 ```
 
-Các test Bước 7 kiểm tra fingerprint, replay/rollback, receipt hỏng, persistence và guard callback. Test Bước 8 dùng app chính: version/content/type/null, conflict/404, phục hồi và DELETE no-op/replay sau phục hồi, rollback INSERT receipt/COMMIT, overflow và body 0 byte. HTTP test cố ý làm mất response sau POST commit rồi retry, nhận đúng snapshot cũ. Hai worker production service tranh write lock: khác key cùng baseVersion thì chỉ một PUT thành công, contender sau BUSY retry nhận 409; cùng key thì retry replay, không thêm lần ghi. Đây không phải stress test hoặc chứng minh mọi kiểu lịch interleaving.
+Unit test gọi riêng validator/mapper/fingerprint để xác định quy tắc sai. Integration test nối nhiều thành phần thật: HTTP → parser/router/controller → service/executor → SQLite đã migrate → JSON response. Database test kiểm tra transaction và persistence trực tiếp; test process còn loại bỏ khả năng replay chỉ nhờ cache RAM. Các lớp này bảo vệ những lỗi khác nhau, không thay thế nhau.
 
-Đã chạy thêm cURL thật trên tiến trình `src/server.js` riêng với database tạm, cổng 3001: 15 request đạt, gồm tạo 201/version 1 → PUT 200/version 2 → DELETE 200/version 3, stale version 409, GET tombstone, retry snapshot cũ, DELETE no-op có receipt mới và phục hồi version 4. Cuối chuỗi có một task sống version 4, năm receipt thành công, integrity_check=ok. Đã dừng đúng server đã tạo và dọn thư mục tạm; không dùng database demo.
+Các test Bước 7–8 giữ nguyên kiểm tra fingerprint, version/conflict/404, no-upsert, tombstone/phục hồi, replay snapshot, rollback callback/INSERT receipt/COMMIT, overflow và mất response sau commit. Bước 9 thêm kiểm tra production HTTP ở biên Unicode/validation, đảo key JSON vẫn replay nhưng đổi kiểu/nội dung vẫn 409, receipt hỏng trả 500 kín và không áp dụng lại. Test restart ghi hai task/bảy receipt ở process A, dừng A rồi mở B trên cùng file và replay cả bảy snapshot, giữ task sống version 4 và tombstone version 2.
 
-OpenAPI đã kiểm tra bằng script giới hạn: 0 key YAML trùng, 51 local $ref hợp lệ, 12 external example occurrence và 13 JSON fixture hợp lệ theo subset schema đang dùng. Chưa có validator OpenAPI chuyên dụng trên máy; không gọi đây là validation OpenAPI đầy đủ.
+Ba ca concurrency dùng hai Worker/hai connection thực sự tranh write lock: contender nhận SQLITE_BUSY khi writer chưa commit rồi được yêu cầu retry cùng request. Khác key/cùng baseVersion nhận VERSION_CONFLICT; cùng key/cùng request nhận replay; cùng key/khác request nhận MUTATION_ID_REUSED trước version conflict. Gate/trigger và timeout chỉ nằm ở test. Đã chạy riêng file này thêm năm lần để kiểm tra độ ổn định của phối hợp, mỗi lần 3/3 đạt; đây không phải benchmark, stress test hoặc chứng minh mọi lịch interleaving.
+
+Trong kết quả TAP, `ok` là assertion đạt, `not ok` đi kèm tên ca/file/stack để chẩn đoán. Cuối lệnh có tổng `tests`, `pass`, `fail`, `skipped`, `cancelled`; lệnh thành công trả exit code 0. Với 147 test hiện tại, kết quả mong đợi là pass 147 và các số còn lại bằng 0. Nếu lỗi listen EPERM trong sandbox, cấp quyền mở localhost rồi chạy lại; không skip hoặc đổi assertion. Xem [bảng đối chiếu và ca quan trọng](../docs/testing/test-cases.md), [kết quả/giới hạn](../docs/testing/test-results.md).
+
+Ở Bước 8 đã chạy cURL thật trên tiến trình `src/server.js` riêng với database tạm, cổng 3001: 15 request đạt, gồm tạo 201/version 1 → PUT 200/version 2 → DELETE 200/version 3, stale version 409, GET tombstone, retry snapshot cũ, DELETE no-op có receipt mới và phục hồi version 4. Cuối chuỗi có một task sống version 4, năm receipt thành công, integrity_check=ok. Đã dừng đúng server đã tạo và dọn thư mục tạm; không dùng database demo. Đây là bằng chứng mốc Bước 8, không tính là chạy cURL mới trong Bước 9.
+
+OpenAPI hiện được kiểm tra tự động trong `npm test`: YAML parse/không trùng key, 51 local $ref resolve, parameter bắt buộc/default includeDeleted, 12 external example occurrence và toàn bộ 13 JSON fixture, cùng request/response HTTP thật cho CRUD/404/409/422/health. Evaluator hỗ trợ các keyword hiện có và từ chối keyword chưa hỗ trợ; kiểm tra độ dài theo Unicode code point, UUID/ngày lịch/UTC. Đây là subset schema, không phải validator OpenAPI/JSON Schema đầy đủ hay toàn bộ RFC 3339. OpenAPI không có content schema cho health/5XX nên test health còn assert body rỗng theo thiết kế; các lỗi hạ tầng kín được test riêng.
 
 `npm run test:smoke` tạo database tạm với fixture sống/tombstone, chạy tiến trình `src/server.js` riêng trên cổng loopback trống và gửi 11 GET bằng HTTP thật. Script tự dừng đúng tiến trình của nó, so dữ liệu trước/sau và dọn thư mục tạm; không đọc `.env`, không dùng/reset/seed lại database demo. Xem [kết quả Bước 6](../docs/backend-step-6.md#kiểm-thử-đã-chạy) về giới hạn kiểm chứng và kiểm tra OpenAPI bằng script giới hạn, không phải validator chuyên dụng.
 

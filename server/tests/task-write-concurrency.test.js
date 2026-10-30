@@ -36,7 +36,7 @@ function waitForMessage(worker, event) {
   });
 }
 
-async function contend(t, sameMutation) {
+async function contend(t, mode) {
   const directory = mkdtempSync(join(tmpdir(), 'studyflow-task-write-race-'));
   const filename = join(directory, 'test.db');
   const gateBuffer = new SharedArrayBuffer(4);
@@ -65,8 +65,9 @@ async function contend(t, sameMutation) {
     body: { ...createBody, baseVersion: 1, title: 'Thay đổi từ thiết bị A' },
     idempotencyKey: writerId,
   };
-  const contenderInput = sameMutation ? structuredClone(writerInput) : {
-    ...writerInput, body: { ...writerInput.body, title: 'Thay đổi độc lập từ thiết bị B' }, idempotencyKey: contenderId,
+  const contenderInput = mode === 'same-request' ? structuredClone(writerInput) : {
+    ...writerInput, body: { ...writerInput.body, title: 'Thay đổi độc lập từ thiết bị B' },
+    idempotencyKey: mode === 'reused-key' ? writerId : contenderId,
   };
   function start(role, input) {
     const worker = new Worker(new URL('../test-support/task-write-worker.js', import.meta.url), {
@@ -105,15 +106,22 @@ async function contend(t, sameMutation) {
   const retried = await waitRetried;
   assert.equal(retried.changes, 0);
   assert.equal(retried.inTransaction, false);
-  if (sameMutation) {
+  if (mode === 'same-request') {
     assert.equal(retried.error, undefined);
     assert.deepEqual(retried.result, { ...committed.result, replayed: true });
   } else {
     assert.equal(retried.result, undefined);
     assert.equal(retried.error.status, 409);
-    assert.equal(retried.error.body.code, 'VERSION_CONFLICT');
     assert.equal(retried.error.body.taskId, createBody.id);
-    assert.deepEqual(retried.error.body.currentTask, committed.result.body.task);
+    if (mode === 'reused-key') {
+      // Both PUTs used baseVersion 1. Receipt identity wins over the now-stale
+      // version: the changed request must not become VERSION_CONFLICT/replay.
+      assert.equal(retried.error.body.code, 'MUTATION_ID_REUSED');
+      assert.equal(Object.hasOwn(retried.error.body, 'currentTask'), false);
+    } else {
+      assert.equal(retried.error.body.code, 'VERSION_CONFLICT');
+      assert.deepEqual(retried.error.body.currentTask, committed.result.body.task);
+    }
   }
 
   const db = openDatabase(filename, { readonly: true });
@@ -123,14 +131,21 @@ async function contend(t, sameMutation) {
     assert.equal(db.prepare('SELECT count(*) AS count FROM mutation_receipts').get().count, 2);
     assert.deepEqual(db.prepare('SELECT mutation_id FROM mutation_receipts ORDER BY mutation_id').all(),
       [writerId, createId].sort().map((mutation_id) => ({ mutation_id })));
+    const receipt = db.prepare('SELECT response_status, response_body FROM mutation_receipts WHERE mutation_id = ?').get(writerId);
+    assert.equal(receipt.response_status, committed.result.status);
+    assert.deepEqual(JSON.parse(receipt.response_body), committed.result.body);
     assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
   } finally { db.close(); }
 }
 
 test('hai mutation khác key cùng baseVersion cạnh tranh thật: một update thành công, một VERSION_CONFLICT', { timeout: 30000 }, async (t) => {
-  await contend(t, false);
+  await contend(t, 'different-key');
 });
 
 test('hai request cùng mutation ID cạnh tranh thật: retry replay và task chỉ tăng version một lần', { timeout: 30000 }, async (t) => {
-  await contend(t, true);
+  await contend(t, 'same-request');
+});
+
+test('cùng mutation ID khác request cạnh tranh thật: chỉ winner ghi và retry bên còn lại bị MUTATION_ID_REUSED', { timeout: 30000 }, async (t) => {
+  await contend(t, 'reused-key');
 });

@@ -25,8 +25,8 @@ async function serve(t, db, apply) {
   const executor = createMutationExecutor(db);
   const app = express();
   app.use(express.json({ strict: false }));
-  // Only this test app has a write route. Full business validation belongs inside
-  // the new-mutation branch, so reused keys cannot be hidden by a pre-validator.
+  // Test-only callback route isolates the executor; production writes are also
+  // tested separately. Full validation belongs after the receipt lookup.
   app.post('/api/v1/tasks', (req, res) => {
     const result = executor.execute({
       method: req.method,
