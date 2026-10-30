@@ -8,6 +8,14 @@ function checkUuid(value, field, fieldErrors) {
   else if (!isUuid(value)) fieldErrors[field] = 'Must be a UUID';
 }
 
+// Minimal identity check, safe to run before receipt lookup/business validation.
+export function validateIdempotencyKey(value) {
+  const fieldErrors = {};
+  checkUuid(value, 'Idempotency-Key', fieldErrors);
+  if (Object.keys(fieldErrors).length) throw validationError(fieldErrors);
+  return value;
+}
+
 function checkBodyVersion(body, creating, fieldErrors) {
   // An invalid root body already has a body error; do not invent missing fields.
   if (!body || typeof body !== 'object' || Array.isArray(body)) return;

@@ -1,6 +1,6 @@
 # StudyFlow Server
 
-Backend của StudyFlow sử dụng Node.js, JavaScript ES modules, Express 5 và SQLite qua `better-sqlite3`. Hiện có nền tảng database, migration/seed, API đọc danh sách/chi tiết task và health. Phần validation, serializer và middleware lỗi của Bước 5 được dùng lại trong API đọc. Hợp đồng chung với Android nằm trong [giao thức đồng bộ](../contracts/sync-protocol.md) và [OpenAPI](../contracts/openapi.yaml). Xem [Bước 4](../docs/backend-step-4.md) về database, [Bước 5](../docs/backend-step-5.md) về validation và [Bước 6](../docs/backend-step-6.md) về API đọc cùng bằng chứng kiểm thử/chạy thử.
+Backend của StudyFlow sử dụng Node.js, JavaScript ES modules, Express 5 và SQLite qua `better-sqlite3`. Hiện có database, migration/seed, API đọc danh sách/chi tiết task, health và executor mutation/receipt dùng chung của Bước 7. API ghi cụ thể chưa được nối vào app chính. Hợp đồng chung với Android nằm trong [giao thức đồng bộ](../contracts/sync-protocol.md) và [OpenAPI](../contracts/openapi.yaml). Xem [Bước 4](../docs/backend-step-4.md), [Bước 5](../docs/backend-step-5.md), [Bước 6](../docs/backend-step-6.md) và [thiết kế database](../docs/database-design.md) về luồng mutation/canonicalization hiện có.
 
 ## Yêu cầu môi trường
 
@@ -93,6 +93,28 @@ GET dùng parameter binding cho ID; không cập nhật task, timestamp/version 
 
 Quyết định người dùng chốt ở Bước 6: thiếu includeDeleted hoặc true trả cả task sống và tombstone; false chỉ trả task sống. Giá trị sai hoặc query lặp trả 422 VALIDATION_ERROR với fieldErrors.includeDeleted. Đã cập nhật Sync Protocol/OpenAPI; Android vẫn gửi rõ true khi đồng bộ.
 
+## Luồng mutation dùng chung — Bước 7
+
+Mutation là một thao tác gửi POST/PUT/DELETE có UUID Idempotency-Key riêng. Receipt là biên nhận thành công lưu trong SQLite; fingerprint SHA-256 giúp kiểm tra cùng key có thật sự là cùng request hay bị dùng lại cho nội dung khác.
+
+`createMutationExecutor(database).execute(input, apply)` đã dùng được trực tiếp. input gồm method, path đầy đủ `/api/v1/...` (không kèm query), query chuỗi HTTP, payload JSON chưa trim ở body và idempotencyKey. Callback đồng bộ nhận `{ database, request }`, dùng dữ liệu đã validation của Bước 5 để áp dụng nghiệp vụ rồi trả `{ status, body }`. Executor trả `{ status, body, replayed }` sau COMMIT; controller sau này chỉ gửi `res.status(status).json(body)`.
+
+```text
+Nhận diện tối thiểu → fingerprint raw JSON → BEGIN IMMEDIATE → tìm receipt
+  Có receipt, cùng request → status/body snapshot cũ → không chạy callback
+  Có receipt, khác request → 409 MUTATION_ID_REUSED
+  Chưa có → validation Bước 5 → callback ghi task/kiểm tra version
+    → kiểm tra response khớp hàng đã lưu → ghi receipt → COMMIT → trả response
+```
+
+Ví dụ Android gửi tạo task, server commit task version 1 + receipt nhưng kết nối đứt trước khi Android nhận response. Android gửi lại cùng key/request. Executor đọc receipt trước callback nên trả lại chính response 201/version 1 cũ, kể cả task hiện đã bị sửa/xóa tiếp. Nếu kiểm tra version trước receipt, retry này có thể bị báo xung đột sai; nếu task và receipt không cùng transaction, retry có thể áp dụng lần hai.
+
+Fingerprint sort key object đệ quy, giữ thứ tự array, mọi query/payload kể cả trường chưa được validator sử dụng. Không trim title, ép kiểu baseVersion, normalize Unicode hoặc thêm thời gian/mutation ID vào hash. Body thiếu khác null; query string `01` khác `1`; giữ cả dấu -0 của số JSON đã parse. Unsupported/repeated query được hash rồi validation trong nhánh mutation mới; request cùng key khác nội dung vẫn là 409 trước lỗi nghiệp vụ. Chi tiết canonicalization và giới hạn callback ở [thiết kế database](../docs/database-design.md#dấu-nhận-diện-request-ở-bước-7).
+
+Callback phải đồng bộ, dùng đúng connection được cung cấp, không tự COMMIT/ROLLBACK hoặc lên lịch ghi sau khi trả về. Executor chặn transaction ngoài đang mở và AsyncFunction/bound async trước khi gọi, rollback khi kết quả callback/receipt/commit sai. Receipt hỏng báo lỗi server; không chạy lại mutation để sửa receipt. SQLITE_BUSY/LOCKED đi qua lỗi 5xx hiện có, không tự tạo key khác hoặc retry vô hạn.
+
+Bước 8 sẽ nối route/controller POST/PUT/DELETE và callback CRUD/version thực tế. Không gắn `validateCreateTask`/`validateUpdateTask`/`validateDeleteTask` đầy đủ trước executor: thứ tự đó có thể che MUTATION_ID_REUSED hoặc làm mất payload gốc. Parser JSON/Content-Type và kiểm tra nhận diện tối thiểu vẫn là bước HTTP cần thiết; dùng path từ originalUrl trước dấu `?` để giữ cả prefix `/api/v1` khi router được mount. Hiện các route mutation trình diễn chỉ nằm trong app test.
+
 ## Cấu trúc mã hiện tại
 
 - `src/app.js`: export `createApp()`, ghép repository/controller/router đọc, JSON parser và middleware lỗi; không tự mở port.
@@ -107,13 +129,18 @@ Quyết định người dùng chốt ở Bước 6: thiếu includeDeleted ho�
 - `src/database/cli.js`: các lệnh migrate, seed, inspect và reset.
 - `src/validation/task-fields.js`: kiểm tra kiểu và giá trị trường nghiệp vụ, UUID, ngày thực, Unicode và số phiên bản an toàn.
 - `src/validation/task-requests.js`: kiểm tra POST/PUT/DELETE, ID, header và query; trả bản dữ liệu mới, không sửa request gốc.
-- `src/http/task-responses.js`: mapper SQLite → camelCase/boolean và envelope task/danh sách; từ chối bản ghi sai.
+- `src/http/task-responses.js`: mapper SQLite → camelCase/boolean, envelope task/danh sách và assertTaskResponse dùng lại cùng quy tắc để kiểm tra callback/receipt snapshot; từ chối dữ liệu sai.
+- `src/mutations/request-fingerprint.js`: canonical JSON đệ quy và SHA-256 nhận diện toàn bộ request gốc.
+- `src/mutations/mutation-executor.js`: receipt trước validation/callback, transaction IMMEDIATE, kiểm tra kết quả và replay snapshot.
+- `src/repositories/mutation-receipt-repository.js`: SELECT/INSERT receipt bằng binding trên cùng connection nghiệp vụ.
 - `src/http/api-errors.js`: cấu trúc lỗi validation và factory chuẩn bị TASK_NOT_FOUND, VERSION_CONFLICT, MUTATION_ID_REUSED.
 - `src/middleware/validate-task-request.js`: adapter Express cho validator; GET danh sách/chi tiết đã dùng trong app chính, kết quả ở `res.locals.validatedRequest`. Adapter ghi vẫn chưa có endpoint tương ứng.
 - `src/middleware/error-handler.js`: JSON lỗi chung, phân biệt route không tồn tại và lỗi task; log lỗi bất ngờ tại server.
 - `tests/database.test.js`: kiểm thử bằng database tạm riêng, không dùng dữ liệu demo.
 - `tests/validation.test.js`, `tests/responses.test.js`, `tests/http.test.js`: kiểm thử validator, mapper, factory lỗi và HTTP trên app test riêng.
 - `tests/task-repository.test.js`, `tests/read-api.test.js`: repository và integration HTTP đọc dùng database riêng, không dùng dữ liệu demo.
+- `tests/request-fingerprint.test.js`, `mutation-executor.test.js`, `mutation-http.test.js`: canonicalization, atomicity/replay/lỗi và HTTP mất phản hồi sau commit.
+- `test-support/mutation-worker.js`: helper hai worker/connection thật để kiểm tra tranh khóa cùng mutation ID; không được app chính nạp.
 - `scripts/smoke-read-api.js`: chạy tiến trình server thật với database tạm/cổng trống, gửi GET và tự dọn tài nguyên sau kiểm tra.
 - `.env.example`: cấu hình mẫu được lưu trong Git.
 - `package-lock.json`: khóa phiên bản dependency để cài lại bằng `npm ci`.
@@ -122,9 +149,9 @@ Quyết định người dùng chốt ở Bước 6: thiếu includeDeleted ho�
 
 - API đọc danh sách/chi tiết đã có; chưa triển khai POST, PUT hoặc DELETE task.
 - Đã có validator HTTP dùng lại; PUT/DELETE chỉ kiểm tra baseVersion là số nguyên an toàn >= 1, chưa kiểm tra task tồn tại hoặc version khớp database.
-- Đã có bảng receipt; chưa có logic tạo hash request, tìm receipt trước version hoặc replay response qua API.
-- TASK_NOT_FOUND đã phát sinh từ GET chi tiết; các factory lỗi 409 vẫn mới chuẩn bị, chưa có service ghi/version/receipt.
-- Chưa ghép Android với backend thật, chưa kiểm thử retry ghi hoặc đồng bộ đầy đủ.
+- Đã có fingerprint, lookup/replay receipt và transaction callback dùng chung; chưa có service/handler CRUD và kiểm tra version theo từng endpoint Bước 8.
+- TASK_NOT_FOUND đã phát sinh từ GET chi tiết; MUTATION_ID_REUSED dùng được trong executor. VERSION_CONFLICT chỉ do callback nghiệp vụ cung cấp, chưa có API ghi chính thức.
+- Retry mutation đã được kiểm thử ở executor/app test; chưa ghép Android với API ghi thật hoặc kiểm thử đồng bộ đầy đủ.
 
 Các endpoint và schema trong OpenAPI mô tả hợp đồng cần triển khai; không có nghĩa mọi endpoint đã hoạt động.
 
@@ -157,7 +184,13 @@ npm run test:smoke
 
 Không cần `.env`, migrate hoặc seed database demo để chạy test. Test dùng file SQLite tạm hoặc `:memory:`, đóng/dọn sau khi chạy. HTTP test mở port ngẫu nhiên trên `127.0.0.1` rồi đóng server; môi trường sandbox cần cho phép listen localhost.
 
-Hiện có 80 test: 12 database, 30 validation, 4 response/factory, 10 HTTP/error middleware, 8 repository và 16 HTTP API đọc. Các test cũ vẫn chạy; kỳ vọng default includeDeleted và health thiếu database đã cập nhật theo Bước 6. Có test hồi quy cho flag/query lặp sau 1.000 khóa và URL mã hóa sai, cùng kiểm tra hai connection WAL trước/sau commit, GET không ghi dữ liệu và health 200/503.
+Hiện có **116 test**: 80 test Bước 4–6, 12 fingerprint, 21 executor và 3 HTTP mutation. Toàn bộ đã chạy thật và đạt 116/116 ngày 29/10/2026. Không thêm dependency/framework. Chạy riêng phần mới bằng:
+
+```bash
+node --test tests/request-fingerprint.test.js tests/mutation-executor.test.js tests/mutation-http.test.js
+```
+
+Test mới kiểm tra request key order/kiểu/array/query/baseVersion, replay snapshot, callback không chạy lại, rollback do callback/receipt INSERT/COMMIT lỗi, receipt hỏng, persistence và async/transaction ngoài bị chặn. Concurrency dùng hai worker thực sự tranh write lock: một bên nhận SQLITE_BUSY, sau commit retry replay và callback vẫn chỉ chạy một lần. HTTP test cố ý đóng response sau commit rồi gửi lại, nhận đúng snapshot cũ. Đây không phải stress test và chưa phải API ghi của app chính.
 
 `npm run test:smoke` tạo database tạm với fixture sống/tombstone, chạy tiến trình `src/server.js` riêng trên cổng loopback trống và gửi 11 GET bằng HTTP thật. Script tự dừng đúng tiến trình của nó, so dữ liệu trước/sau và dọn thư mục tạm; không đọc `.env`, không dùng/reset/seed lại database demo. Xem [kết quả Bước 6](../docs/backend-step-6.md#kiểm-thử-đã-chạy) về giới hạn kiểm chứng và kiểm tra OpenAPI bằng script giới hạn, không phải validator chuyên dụng.
 
