@@ -1,4 +1,5 @@
 import { ApiError } from '../http/api-errors.js';
+import { emitLog, logMutationFailed, requestDiagnosticFields, safeRoute, safeStackFrames } from '../logging/request-log.js';
 
 // Transport errors below are implementation policies, not additional sync outcomes.
 function requestError(error) {
@@ -26,15 +27,11 @@ function requestError(error) {
 
 export function errorDiagnostic(error, req) {
   return {
-    time: new Date().toISOString(),
-    method: req.method,
-    route: req.route?.path ?? '<unmatched>',
+    ...requestDiagnosticFields(req),
+    route: safeRoute(req),
     errorName: error instanceof Error ? error.name : 'NonErrorThrown',
     errorCode: /^(SQLITE|ERR)_[A-Z0-9_]+$/.test(error?.code) ? error.code : undefined,
-    // Error messages may embed SQL/payload. Keep call sites, omit the message/body.
-    stackFrames: typeof error?.stack === 'string'
-      ? error.stack.split('\n').filter((line) => /^\s+at /.test(line)).join('\n')
-      : undefined,
+    stackFrames: safeStackFrames(error),
   };
 }
 
@@ -45,8 +42,14 @@ export function routeNotFound(req, res) {
 export function createErrorHandler({ logger = console } = {}) {
   return (error, req, res, next) => {
     const transportError = requestError(error);
+    const status = error instanceof ApiError ? error.status : transportError?.status ?? 500;
+    const code = error instanceof ApiError ? error.body.code : transportError?.code ?? 'INTERNAL_ERROR';
+    logMutationFailed(req, status, code);
     if (!(error instanceof ApiError) && !transportError) {
-      logger.error('Unhandled request error', errorDiagnostic(error, req));
+      // Once headers are sent, the response status can no longer become 500.
+      emitLog(logger, 'error', 'request.error', {
+        ...errorDiagnostic(error, req), status: res.headersSent ? res.statusCode : status,
+      });
     }
     if (res.headersSent) {
       next(error);

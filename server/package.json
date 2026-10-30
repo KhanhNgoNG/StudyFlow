@@ -19,7 +19,8 @@
     "db:inspect": "node --env-file=.env src/database/cli.js inspect",
     "db:reset": "node --env-file=.env src/database/cli.js reset",
     "test": "node --test",
-    "test:smoke": "node scripts/smoke-read-api.js"
+    "test:smoke": "node scripts/smoke-read-api.js",
+    "test:faults": "node scripts/reproduce-faults.js"
   },
   "devDependencies": {
     "yaml": "2.9.1"

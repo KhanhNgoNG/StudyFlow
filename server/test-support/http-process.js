@@ -32,7 +32,10 @@ try {
   database = openDatabase(process.argv[2], { fileMustExist: true });
   database.prepare('SELECT id FROM tasks LIMIT 0').all();
   database.prepare('SELECT mutation_id FROM mutation_receipts LIMIT 0').all();
-  server = createApp({ database }).listen(0, '127.0.0.1');
+  const sendLog = (event, record) => {
+    if (process.connected) process.send({ event: 'log', record }, () => {});
+  };
+  server = createApp({ database, logger: { info: sendLog, error: sendLog } }).listen(0, '127.0.0.1');
   server.once('listening', () => {
     if (closing) {
       server.close(closeDatabase);

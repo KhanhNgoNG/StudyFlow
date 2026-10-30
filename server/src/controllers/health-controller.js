@@ -1,4 +1,5 @@
 import { errorDiagnostic } from '../middleware/error-handler.js';
+import { emitLog } from '../logging/request-log.js';
 
 export function createHealthController({ healthRepository, logger = console }) {
   return (req, res) => {
@@ -6,7 +7,7 @@ export function createHealthController({ healthRepository, logger = console }) {
       healthRepository.checkReady();
       res.status(200).end();
     } catch (error) {
-      logger.error('Database readiness check failed', errorDiagnostic(error, req));
+      emitLog(logger, 'error', 'health.unavailable', { ...errorDiagnostic(error, req), status: 503, outcome: 'temporary_error' });
       res.status(503).end();
     }
   };

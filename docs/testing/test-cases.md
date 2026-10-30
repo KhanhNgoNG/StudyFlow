@@ -52,3 +52,36 @@
 - OpenAPI dùng parser YAML và evaluator subset: local refs, allOf/oneOf, type/enum/required/nullable/properties/additionalProperties/items, giới hạn số/độ dài code point và UUID/date/UTC. Keyword chưa hỗ trợ làm test lỗi thay vì bị bỏ qua. Không kiểm tra toàn bộ OpenAPI semantics/JSON Schema/RFC 3339; offsets/leap seconds không thuộc format UTC đang dùng. Unknown fields do OpenAPI cho phép không tự bị cấm; test envelope/metadata chặt hơn vẫn được giữ riêng.
 - Chưa thực hiện stress HTTP, benchmark, forced crash/kill ngay giữa COMMIT, hoặc mô phỏng mọi lịch interleaving. Persistence ở đây là đóng tiến trình bình thường rồi khởi động mới, không phải bằng chứng chịu mất điện.
 - Room, outbox/SyncEngine, WorkManager, giao diện xung đột và hội tụ hai thiết bị Android chưa được kiểm chứng bởi các ca backend này. Các ca đó cần bộ kiểm thử và thiết bị riêng; không đánh dấu đạt từ kết quả backend.
+
+## Audit trước Bước 10
+
+Ngày 30/10/2026, trước khi thêm mã công cụ/log: Bước 7–9 đã có test SQLite rollback callback/receipt INSERT/COMMIT, production HTTP mất response sau POST commit, restart/replay và tranh khóa Worker. Khoảng trống là tái hiện được bằng lệnh với bằng chứng đọc được và correlation log; không cần viết lại các test đó.
+
+| Nội dung | Hiện có | Phần bổ sung dự kiến |
+|---|---|---|
+| Rollback/lỗi tạm thời trước commit | Trigger/constraint SQLite thật trong test | Tái sử dụng trigger trên DB tạm của harness; 500/no receipt rồi retry đúng snapshot |
+| Mất response sau commit | Transport wrapper test | Proxy cục bộ nhận đủ upstream response rồi giữ/phá downstream; xác minh receipt và replay |
+| Restart/persistence | Child production app, IPC port động/shutdown | Tái sử dụng helper; dừng đúng child, quan sát lỗi kết nối rồi mở lại cùng DB |
+| Timeout | HTTP test có deadline bảo vệ | Gate trước dispatch và gate sau upstream response, phân biệt trạng thái bằng tín hiệu + SQLite, không đoán commit bằng sleep |
+| Log | Chỉ lỗi bất ngờ/health, chưa có request ID/success/replay/duration | JSON có cấu trúc, UUID server cho mỗi request, mutation ID giữ qua retry, duration monotonic, outcome sau transaction |
+| An toàn logger | Sink error đang gọi trực tiếp; stack chứa đường dẫn nội bộ | Chặn lỗi sink; rút gọn diagnostic; không để logging thay đổi response/task/receipt |
+
+Chọn harness Node nhỏ và proxy cấu hình bằng closure, không thêm endpoint, header/query điều khiển fault, framework hoặc dependency. Mỗi lượt sở hữu DB/port/process riêng, có timeout tổng và cleanup trong finally. Log chỉ phản ánh kết quả đã biết: committed/replay sau executor, finish ở server khác client nhận được, close không tự chứng minh rollback.
+
+## Các ca Bước 10
+
+Các ca dưới đây dùng app production, migration thật và SQLite tạm. Chạy từ `/Users/tuankhong/Documents/StudyFlow/server`; `npm run test:faults` chạy cả năm, hoặc dùng lệnh riêng trong [kịch bản demo](../demo/demo-script.md). Không cần `.env` hoặc dừng server đang chạy của người dùng.
+
+| Mã | Điều kiện/thao tác | Kết quả phải xác minh |
+|---|---|---|
+| BE-16 | `unavailable`: child đã ghi, dừng đúng child rồi gọi lại; restart trên cùng file | Lỗi kết nối không có HTTP status, dữ liệu bền vững, retry nguyên snapshot nhận receipt |
+| BE-17 | `timeout-before-commit`: proxy giữ trước dispatch, client hết timeout; hủy request bị giữ rồi retry | Tín hiệu chứng minh chưa dispatch; không có request ID production hoặc task/receipt mới cho lần timeout; retry được áp dụng một lần |
+| BE-18 | `transient-before-commit`: trigger test làm receipt INSERT lỗi rồi gỡ trigger | 500 tạm thời; task/receipt cùng rollback; retry đúng mutation có thể áp dụng mới, không bị 409/422 giả |
+| BE-19 | `timeout-after-commit`: giữ downstream sau khi đã nhận đủ response upstream | Receipt đã commit, client timeout; retry snapshot cũ không tăng version/time/receipt |
+| BE-20 | `lost-response`: proxy nhận upstream rồi phá downstream trước success bytes; sửa task bằng mutation mới rồi retry mutation cũ | Client không nhận success đầu, replay status/body cũ chính xác, task hiện tại mới hơn vẫn nguyên |
+| BE-21 | Log HTTP production cho áp dụng mới/replay/no-op/conflict/validation/lỗi tạm thời | Request ID là UUID khác nhau mỗi lần gửi; mutation ID giữ qua retry; applied sau commit, replay không là lần ghi task mới |
+| BE-22 | Logger ném lỗi/reject; SQLite receipt INSERT/COMMIT lỗi; response đóng/lỗi sau commit | Logging không đổi response hoặc atomicity; không log commit trước commit thật, không log rollback chỉ vì socket đóng |
+| BE-23 | Payload/query/header/ID không hợp lệ và chuỗi đầu vào có ký tự điều khiển | Log JSON an toàn, không chứa body/title/description/query/env/full internal path; chỉ ghi task/mutation UUID xác định được, không tin request ID do client gửi |
+| BE-24 | Assertion lỗi giữa lượt harness, CLI argument sai và production start/dev | Cleanup đúng child/proxy/DB/thư mục tạm kể cả failure; exit code khác 0 khi assertion lỗi; start/dev không import harness hoặc bật fault bằng header/query |
+
+Mỗi kịch bản có trạng thái trước/sau và assertion dựa trên SQLite/response, không chỉ dựa vào log “replay”. Công cụ không lưu evidence mặc định; JSON stdout nêu scenario, lỗi client, mutation/request ID, số task/receipt, version/time và kết quả kiểm chứng. Các duration dùng cho chẩn đoán, không phải benchmark.
