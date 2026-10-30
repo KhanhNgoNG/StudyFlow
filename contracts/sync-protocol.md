@@ -160,7 +160,9 @@ DELETE /api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814?baseVersion=2
 Idempotency-Key: 4099f1b3-084d-41ad-96f8-736621763d0d
 ```
 
-DELETE không cần body. Thành công trả `200` với envelope `{"task": ...}`; task giữ ID và các trường nghiệp vụ, có `isDeleted=true`, version mới và thời gian server mới. Server không xóa vật lý bản ghi trong giai đoạn demo.
+DELETE không cần body. Khi xóa task đang sống, thành công trả `200` với envelope `{"task": ...}`; task giữ ID và các trường nghiệp vụ, có `isDeleted=true`, version mới và thời gian server mới. Server không xóa vật lý bản ghi trong giai đoạn demo. Trường hợp task đã là tombstone được quy định ở phần bổ sung dưới đây.
+
+**Bổ sung chính thức do người dùng xác nhận ở Bước 8 (29/10/2026):** Với mutation DELETE mới, server vẫn kiểm tra receipt trước version. ID chưa tồn tại trả `404 TASK_NOT_FOUND`; baseVersion không khớp trả `409 VERSION_CONFLICT` với currentTask đầy đủ, kể cả tombstone. Nếu version khớp và task đang sống, xóa logic và tăng version/cập nhật thời gian như trên. Nếu version khớp và task đã là tombstone, trả `200 {"task": ...}` với tombstone hiện tại, giữ nguyên version, serverUpdatedAt và toàn bộ nội dung. Thành công không thay đổi dữ liệu này vẫn ghi receipt mới trong cùng transaction. Retry trả snapshot receipt đó, kể cả task đã được phục hồi hoặc sửa tiếp; không xóa lại task hiện tại.
 
 ### 5.4. Lấy danh sách và chi tiết
 
@@ -206,6 +208,8 @@ Content-Type: application/json
 ## 6. Quy tắc phiên bản và phát hiện xung đột
 
 Mỗi thay đổi mới được server chấp nhận làm version công việc tăng một đơn vị. Retry của mutation đã thành công không tăng version lần nữa. Kiểm tra version và ghi dữ liệu phải nguyên tử trong transaction.
+
+DELETE mới trên tombstone với version khớp là thành công không thay đổi dữ liệu theo mục 5.3: không tăng version hoặc đổi thời gian, nhưng có receipt cho mutation mới.
 
 Ví dụ A và B cùng có phiên bản 1:
 

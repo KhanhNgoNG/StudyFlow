@@ -1,6 +1,6 @@
 # StudyFlow Server
 
-Backend của StudyFlow sử dụng Node.js, JavaScript ES modules, Express 5 và SQLite qua `better-sqlite3`. Hiện có database, migration/seed, API đọc danh sách/chi tiết task, health và executor mutation/receipt dùng chung của Bước 7. API ghi cụ thể chưa được nối vào app chính. Hợp đồng chung với Android nằm trong [giao thức đồng bộ](../contracts/sync-protocol.md) và [OpenAPI](../contracts/openapi.yaml). Xem [Bước 4](../docs/backend-step-4.md), [Bước 5](../docs/backend-step-5.md), [Bước 6](../docs/backend-step-6.md) và [thiết kế database](../docs/database-design.md) về luồng mutation/canonicalization hiện có.
+Backend của StudyFlow sử dụng Node.js, JavaScript ES modules, Express 5 và SQLite qua `better-sqlite3`. Health, API đọc và POST/PUT/DELETE task đã hoạt động trong app chính. API ghi dùng lại executor mutation/receipt của Bước 7, không có luồng idempotency thứ hai. Hợp đồng chung với Android nằm trong [giao thức đồng bộ](../contracts/sync-protocol.md) và [OpenAPI](../contracts/openapi.yaml). Các hướng dẫn [Bước 4](../docs/backend-step-4.md), [Bước 5](../docs/backend-step-5.md), [Bước 6](../docs/backend-step-6.md) ghi lại từng mốc trước; xem [thiết kế database](../docs/database-design.md) và README này về hiện trạng sau Bước 8.
 
 ## Yêu cầu môi trường
 
@@ -93,11 +93,27 @@ GET dùng parameter binding cho ID; không cập nhật task, timestamp/version 
 
 Quyết định người dùng chốt ở Bước 6: thiếu includeDeleted hoặc true trả cả task sống và tombstone; false chỉ trả task sống. Giá trị sai hoặc query lặp trả 422 VALIDATION_ERROR với fieldErrors.includeDeleted. Đã cập nhật Sync Protocol/OpenAPI; Android vẫn gửi rõ true khi đồng bộ.
 
+## API ghi công việc — Bước 8
+
+| Method | Endpoint | Mutation mới thành công |
+|---|---|---|
+| POST | `/api/v1/tasks` | Giữ UUID client, tạo version 1, timestamp UTC của server, trả 201 với task đầy đủ. ID đã tồn tại, kể cả tombstone, trả 409 VERSION_CONFLICT. |
+| PUT | `/api/v1/tasks/{id}` | Kiểm tra tồn tại/version, thay toàn bộ nghiệp vụ, tăng version một, trả 200. Không upsert hoặc tự bỏ qua conflict khi cùng nội dung. |
+| DELETE | `/api/v1/tasks/{id}?baseVersion=2` | Task sống: giữ nội dung, đặt isDeleted=true, tăng version một, trả 200. Không xóa vật lý hoặc trả 204. |
+
+POST/PUT bắt buộc Content-Type application/json. Mọi thao tác ghi cần Idempotency-Key UUID; PUT phải có ID body khớp URL. description="", completed=false và dueDate=null được lưu đúng, không fallback về nội dung cũ. version/serverUpdatedAt client gửi không được dùng làm dữ liệu có thẩm quyền. Task chưa tồn tại ở PUT/DELETE trả 404; version khác trả 409 với currentTask đầy đủ, không ghi receipt thành công.
+
+Quyết định chính thức bổ sung ở Bước 8: DELETE bằng key mới trên tombstone, baseVersion khớp, là **thành công không đổi task**. Trả tombstone hiện tại, giữ nguyên version, serverUpdatedAt/nội dung, nhưng ghi receipt mới. Version cũ vẫn 409. PUT isDeleted=false với version khớp có thể phục hồi tombstone; retry DELETE cũ sau phục hồi chỉ trả snapshot tombstone từ receipt, không xóa lại task hiện tại. Quyết định đã được ghi vào Sync Protocol/OpenAPI và mô tả JSON mẫu.
+
+Service chạy kiểm tra tồn tại/version và SQL trong callback của cùng transaction IMMEDIATE do executor quản lý. Repository dùng UPDATE có điều kiện id/version, kiểm tra số hàng đổi; không đọc version ngoài transaction. Trước khi tăng, kiểm tra miền số nguyên an toàn: MAX_SAFE_INTEGER-1 có thể tăng đến MAX_SAFE_INTEGER; nếu cần tăng tiếp thì trả lỗi server 500 hiện có, rollback và không ghi receipt. Version cũ vẫn conflict trước bước này. DELETE no-op trên tombstone ở MAX không cần tăng nên vẫn thành công.
+
+Controller chỉ kiểm tra transport, chuyển nguyên path/query/JSON vào service và gửi status/body sau commit. JSON parser ghi lại số byte để body 0 byte có header JSON không bị nhầm với payload `{}` thật. DELETE không body được chấp nhận; JSON `{}`/null thực sự được fingerprint rồi bị validation trong nhánh mới từ chối. Payload non-JSON có nội dung trả 415, không bị bỏ qua rồi coi như request không body. UUID/task/body/version validation đầy đủ vẫn sau lookup receipt.
+
 ## Luồng mutation dùng chung — Bước 7
 
 Mutation là một thao tác gửi POST/PUT/DELETE có UUID Idempotency-Key riêng. Receipt là biên nhận thành công lưu trong SQLite; fingerprint SHA-256 giúp kiểm tra cùng key có thật sự là cùng request hay bị dùng lại cho nội dung khác.
 
-`createMutationExecutor(database).execute(input, apply)` đã dùng được trực tiếp. input gồm method, path đầy đủ `/api/v1/...` (không kèm query), query chuỗi HTTP, payload JSON chưa trim ở body và idempotencyKey. Callback đồng bộ nhận `{ database, request }`, dùng dữ liệu đã validation của Bước 5 để áp dụng nghiệp vụ rồi trả `{ status, body }`. Executor trả `{ status, body, replayed }` sau COMMIT; controller sau này chỉ gửi `res.status(status).json(body)`.
+`createMutationExecutor(database).execute(input, apply)` được service ghi dùng lại. input gồm method, path đầy đủ `/api/v1/...` (không kèm query), query chuỗi HTTP, payload JSON chưa trim ở body và idempotencyKey. Callback đồng bộ nhận `{ database, request }`, dùng dữ liệu đã validation của Bước 5 để áp dụng nghiệp vụ rồi trả `{ status, body }`. Executor trả `{ status, body, replayed }` sau COMMIT; controller chỉ gửi `res.status(status).json(body)`.
 
 ```text
 Nhận diện tối thiểu → fingerprint raw JSON → BEGIN IMMEDIATE → tìm receipt
@@ -113,14 +129,16 @@ Fingerprint sort key object đệ quy, giữ thứ tự array, mọi query/paylo
 
 Callback phải đồng bộ, dùng đúng connection được cung cấp, không tự COMMIT/ROLLBACK hoặc lên lịch ghi sau khi trả về. Executor chặn transaction ngoài đang mở và AsyncFunction/bound async trước khi gọi, rollback khi kết quả callback/receipt/commit sai. Receipt hỏng báo lỗi server; không chạy lại mutation để sửa receipt. SQLITE_BUSY/LOCKED đi qua lỗi 5xx hiện có, không tự tạo key khác hoặc retry vô hạn.
 
-Bước 8 sẽ nối route/controller POST/PUT/DELETE và callback CRUD/version thực tế. Không gắn `validateCreateTask`/`validateUpdateTask`/`validateDeleteTask` đầy đủ trước executor: thứ tự đó có thể che MUTATION_ID_REUSED hoặc làm mất payload gốc. Parser JSON/Content-Type và kiểm tra nhận diện tối thiểu vẫn là bước HTTP cần thiết; dùng path từ originalUrl trước dấu `?` để giữ cả prefix `/api/v1` khi router được mount. Hiện các route mutation trình diễn chỉ nằm trong app test.
+Bước 8 đã nối route/controller POST/PUT/DELETE và callback CRUD/version trong service. Không gắn `validateCreateTask`/`validateUpdateTask`/`validateDeleteTask` đầy đủ trước executor: thứ tự đó có thể che MUTATION_ID_REUSED hoặc làm mất payload gốc. Parser JSON/Content-Type và kiểm tra nhận diện tối thiểu vẫn chạy trước; path lấy từ originalUrl trước dấu `?` để giữ cả prefix `/api/v1`. Các cơ chế cố ý làm mất response hoặc lỗi SQL chỉ có trong test, không có endpoint gây lỗi/reset của app chính.
 
 ## Cấu trúc mã hiện tại
 
-- `src/app.js`: export `createApp()`, ghép repository/controller/router đọc, JSON parser và middleware lỗi; không tự mở port.
+- `src/app.js`: export `createApp()`, ghép service/repository/controller/router đọc và ghi, JSON parser có số byte payload và middleware lỗi; không tự mở port.
 - `src/routes/read-routes.js`: khai báo GET health/danh sách/chi tiết và gắn validator Bước 5.
+- `src/routes/write-routes.js`: khai báo POST/PUT/DELETE, chỉ gắn kiểm tra Content-Type tối thiểu trước controller.
 - `src/controllers/task-controller.js`, `health-controller.js`: điều phối truy vấn và trả HTTP response; health xử lý 200/503 rỗng.
-- `src/repositories/task-repository.js`, `health-repository.js`: chỉ truy vấn SQLite; không ghi dữ liệu hoặc tự mở connection khác.
+- `src/services/task-mutation-service.js`: callback POST/PUT/DELETE cho executor; kiểm tra tồn tại/version, giữ UUID, server timestamp, tombstone/no-op và giới hạn version.
+- `src/repositories/task-repository.js`: SELECT, INSERT và UPDATE có điều kiện id/version bằng binding; giữ nguyên nội dung khi xóa logic. `health-repository.js` chỉ kiểm tra schema/connection. Các repository không tự mở connection khác.
 - `src/server.js`: tạo app, mở port và xử lý lỗi khởi động.
 - `src/config/env.js`: đọc cấu hình và kiểm tra `PORT`.
 - `src/database/connection.js`: mở SQLite, bật foreign key, WAL, timeout khóa và synchronous FULL.
@@ -134,26 +152,25 @@ Bước 8 sẽ nối route/controller POST/PUT/DELETE và callback CRUD/version 
 - `src/mutations/mutation-executor.js`: receipt trước validation/callback, transaction IMMEDIATE, kiểm tra kết quả và replay snapshot.
 - `src/repositories/mutation-receipt-repository.js`: SELECT/INSERT receipt bằng binding trên cùng connection nghiệp vụ.
 - `src/http/api-errors.js`: cấu trúc lỗi validation và factory chuẩn bị TASK_NOT_FOUND, VERSION_CONFLICT, MUTATION_ID_REUSED.
-- `src/middleware/validate-task-request.js`: adapter Express cho validator; GET danh sách/chi tiết đã dùng trong app chính, kết quả ở `res.locals.validatedRequest`. Adapter ghi vẫn chưa có endpoint tương ứng.
+- `src/middleware/validate-task-request.js`: adapter GET và kiểm tra transport JSON dùng chung; full validator ghi được executor gọi sau receipt, không gắn trước route ghi.
 - `src/middleware/error-handler.js`: JSON lỗi chung, phân biệt route không tồn tại và lỗi task; log lỗi bất ngờ tại server.
 - `tests/database.test.js`: kiểm thử bằng database tạm riêng, không dùng dữ liệu demo.
 - `tests/validation.test.js`, `tests/responses.test.js`, `tests/http.test.js`: kiểm thử validator, mapper, factory lỗi và HTTP trên app test riêng.
 - `tests/task-repository.test.js`, `tests/read-api.test.js`: repository và integration HTTP đọc dùng database riêng, không dùng dữ liệu demo.
 - `tests/request-fingerprint.test.js`, `mutation-executor.test.js`, `mutation-http.test.js`: canonicalization, atomicity/replay/lỗi và HTTP mất phản hồi sau commit.
 - `test-support/mutation-worker.js`: helper hai worker/connection thật để kiểm tra tranh khóa cùng mutation ID; không được app chính nạp.
+- `tests/task-write-api.test.js`: 18 test HTTP trên app chính cho CRUD/version, replay, rollback, JSON body và mất phản hồi. `tests/task-write-concurrency.test.js`, `test-support/task-write-worker.js`: hai ca cạnh tranh production service bằng hai worker, trigger/gate chỉ thuộc test.
 - `scripts/smoke-read-api.js`: chạy tiến trình server thật với database tạm/cổng trống, gửi GET và tự dọn tài nguyên sau kiểm tra.
 - `.env.example`: cấu hình mẫu được lưu trong Git.
 - `package-lock.json`: khóa phiên bản dependency để cài lại bằng `npm ci`.
 
 ## Giới hạn hiện tại
 
-- API đọc danh sách/chi tiết đã có; chưa triển khai POST, PUT hoặc DELETE task.
-- Đã có validator HTTP dùng lại; PUT/DELETE chỉ kiểm tra baseVersion là số nguyên an toàn >= 1, chưa kiểm tra task tồn tại hoặc version khớp database.
-- Đã có fingerprint, lookup/replay receipt và transaction callback dùng chung; chưa có service/handler CRUD và kiểm tra version theo từng endpoint Bước 8.
-- TASK_NOT_FOUND đã phát sinh từ GET chi tiết; MUTATION_ID_REUSED dùng được trong executor. VERSION_CONFLICT chỉ do callback nghiệp vụ cung cấp, chưa có API ghi chính thức.
-- Retry mutation đã được kiểm thử ở executor/app test; chưa ghép Android với API ghi thật hoặc kiểm thử đồng bộ đầy đủ.
+- API đọc/ghi và replay receipt đã hoạt động trong app chính; chưa ghép Retrofit/SyncEngine Android với backend này hoặc kiểm thử đầy đủ trên hai thiết bị Android.
+- Không có phân trang, realtime, hợp nhất từng trường, lịch sử khôi phục hoặc endpoint chọn bên thắng.
+- Concurrency đã thử với hai worker/kết nối và service thật, chưa phải stress test HTTP tải lớn. Bước 9 chưa được mô tả chi tiết trong repo; không tự triển khai phần tiếp theo.
 
-Các endpoint và schema trong OpenAPI mô tả hợp đồng cần triển khai; không có nghĩa mọi endpoint đã hoạt động.
+Các endpoint task/health trong OpenAPI hiện đã có implementation; các giới hạn kiểm chứng được ghi ở trên.
 
 ## Quy tắc validation và lỗi của Bước 5
 
@@ -184,15 +201,54 @@ npm run test:smoke
 
 Không cần `.env`, migrate hoặc seed database demo để chạy test. Test dùng file SQLite tạm hoặc `:memory:`, đóng/dọn sau khi chạy. HTTP test mở port ngẫu nhiên trên `127.0.0.1` rồi đóng server; môi trường sandbox cần cho phép listen localhost.
 
-Hiện có **116 test**: 80 test Bước 4–6, 12 fingerprint, 21 executor và 3 HTTP mutation. Toàn bộ đã chạy thật và đạt 116/116 ngày 29/10/2026. Không thêm dependency/framework. Chạy riêng phần mới bằng:
+Hiện có **136 test**, toàn bộ đã chạy thật và đạt: 116 test Bước 4–7 (cập nhật kỳ vọng route ghi đã có), 18 HTTP CRUD và 2 concurrency service Bước 8. Không thêm dependency/framework. Chạy riêng từng nhóm mới bằng:
 
 ```bash
 node --test tests/request-fingerprint.test.js tests/mutation-executor.test.js tests/mutation-http.test.js
+node --test tests/task-write-api.test.js tests/task-write-concurrency.test.js
 ```
 
-Test mới kiểm tra request key order/kiểu/array/query/baseVersion, replay snapshot, callback không chạy lại, rollback do callback/receipt INSERT/COMMIT lỗi, receipt hỏng, persistence và async/transaction ngoài bị chặn. Concurrency dùng hai worker thực sự tranh write lock: một bên nhận SQLITE_BUSY, sau commit retry replay và callback vẫn chỉ chạy một lần. HTTP test cố ý đóng response sau commit rồi gửi lại, nhận đúng snapshot cũ. Đây không phải stress test và chưa phải API ghi của app chính.
+Các test Bước 7 kiểm tra fingerprint, replay/rollback, receipt hỏng, persistence và guard callback. Test Bước 8 dùng app chính: version/content/type/null, conflict/404, phục hồi và DELETE no-op/replay sau phục hồi, rollback INSERT receipt/COMMIT, overflow và body 0 byte. HTTP test cố ý làm mất response sau POST commit rồi retry, nhận đúng snapshot cũ. Hai worker production service tranh write lock: khác key cùng baseVersion thì chỉ một PUT thành công, contender sau BUSY retry nhận 409; cùng key thì retry replay, không thêm lần ghi. Đây không phải stress test hoặc chứng minh mọi kiểu lịch interleaving.
+
+Đã chạy thêm cURL thật trên tiến trình `src/server.js` riêng với database tạm, cổng 3001: 15 request đạt, gồm tạo 201/version 1 → PUT 200/version 2 → DELETE 200/version 3, stale version 409, GET tombstone, retry snapshot cũ, DELETE no-op có receipt mới và phục hồi version 4. Cuối chuỗi có một task sống version 4, năm receipt thành công, integrity_check=ok. Đã dừng đúng server đã tạo và dọn thư mục tạm; không dùng database demo.
+
+OpenAPI đã kiểm tra bằng script giới hạn: 0 key YAML trùng, 51 local $ref hợp lệ, 12 external example occurrence và 13 JSON fixture hợp lệ theo subset schema đang dùng. Chưa có validator OpenAPI chuyên dụng trên máy; không gọi đây là validation OpenAPI đầy đủ.
 
 `npm run test:smoke` tạo database tạm với fixture sống/tombstone, chạy tiến trình `src/server.js` riêng trên cổng loopback trống và gửi 11 GET bằng HTTP thật. Script tự dừng đúng tiến trình của nó, so dữ liệu trước/sau và dọn thư mục tạm; không đọc `.env`, không dùng/reset/seed lại database demo. Xem [kết quả Bước 6](../docs/backend-step-6.md#kiểm-thử-đã-chạy) về giới hạn kiểm chứng và kiểm tra OpenAPI bằng script giới hạn, không phải validator chuyên dụng.
+
+## Tái hiện chuỗi ghi bằng cURL với database tạm
+
+Terminal thứ nhất: tạo database riêng ngoài repo, chỉ migrate schema, không nạp/reset demo. Cổng 3001 phải đang trống; nếu server báo EADDRINUSE thì không dừng tiến trình khác.
+
+```bash
+cd /Users/tuankhong/Documents/StudyFlow/server
+STUDYFLOW_STEP8_TMP="$(mktemp -d)"
+DATABASE_PATH="$STUDYFLOW_STEP8_TMP/studyflow.db" node --input-type=module -e 'import {openDatabase} from "./src/database/connection.js"; import {migrateDatabase} from "./src/database/migrate.js"; const db=openDatabase(process.env.DATABASE_PATH); migrateDatabase(db); db.close();'
+NODE_ENV=test HOST=127.0.0.1 PORT=3001 DATABASE_PATH="$STUDYFLOW_STEP8_TMP/studyflow.db" node src/server.js
+```
+
+Terminal thứ hai chạy đúng các UUID và JSON mẫu sau. Chỉ mutation mới đổi key; retry giữ nguyên key/payload/query. Cả hai terminal không cần đọc `.env` cho ví dụ này.
+
+```bash
+cd /Users/tuankhong/Documents/StudyFlow/server
+curl -i http://127.0.0.1:3001/api/v1/health
+curl -i -X POST http://127.0.0.1:3001/api/v1/tasks -H 'Content-Type: application/json' -H 'Idempotency-Key: 7fe7b179-6677-43ec-99e2-c0c035a184a8' --data-binary @../contracts/examples/create-task-request.json
+curl -i http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814
+curl -i -X PUT http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814 -H 'Content-Type: application/json' -H 'Idempotency-Key: 345ccf57-5bf5-43d7-9175-45375211bbaa' --data-binary @../contracts/examples/update-task-request.json
+curl -i -X PUT http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814 -H 'Content-Type: application/json' -H 'Idempotency-Key: 00000000-0000-4000-8000-000000000003' --data-binary @../contracts/examples/update-task-request.json
+curl -i -X DELETE 'http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814?baseVersion=2' -H 'Idempotency-Key: 4099f1b3-084d-41ad-96f8-736621763d0d'
+curl -i http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814
+curl -i -X POST http://127.0.0.1:3001/api/v1/tasks -H 'Content-Type: application/json' -H 'Idempotency-Key: 7fe7b179-6677-43ec-99e2-c0c035a184a8' --data-binary @../contracts/examples/create-task-request.json
+curl -i -X DELETE 'http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814?baseVersion=2' -H 'Idempotency-Key: 4099f1b3-084d-41ad-96f8-736621763d0d'
+curl -i -X DELETE 'http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814?baseVersion=3' -H 'Idempotency-Key: 00000000-0000-4000-8000-000000000004'
+curl -i -X PUT http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814 -H 'Content-Type: application/json' -H 'Idempotency-Key: 00000000-0000-4000-8000-000000000005' --data-binary '{"id":"612954cb-842b-4d60-a0c8-48a7cc401814","baseVersion":3,"title":"Giữ công việc sau tombstone","description":"Triển khai CRUD và kiểm tra gửi lại theo hợp đồng","subjectCode":"MOBILE","dueDate":null,"priority":"HIGH","completed":false,"isDeleted":false}'
+curl -i -X DELETE 'http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814?baseVersion=3' -H 'Idempotency-Key: 00000000-0000-4000-8000-000000000004'
+curl -i http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814
+curl -i 'http://127.0.0.1:3001/api/v1/tasks?includeDeleted=true'
+curl -i -X DELETE 'http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814?baseVersion=3' -H 'Idempotency-Key: 00000000-0000-4000-8000-000000000006'
+```
+
+Kết quả lần lượt: 200, 201, 200, 200, 409, 200, 200, 201, 200, 200, 200, 200, 200, 200, 409. DELETE cuối dùng key mới và version cũ nên conflict; DELETE ngay sau phục hồi dùng key no-op cũ nên replay tombstone version 3, trong khi GET tiếp theo vẫn là task sống version 4. Dừng server tự chạy bằng Ctrl+C ở terminal thứ nhất. Dữ liệu ví dụ nằm trong thư mục tạm, không ở database demo của repo.
 
 ## Reset dữ liệu demo
 

@@ -193,14 +193,14 @@ test('lỗi bất ngờ và hàng database sai trả 500 kín; log giữ vị tr
   assert.doesNotMatch(JSON.stringify(logs), /SELECT secret|internal.db|secret-payload|secret-query|secret-header/);
 });
 
-test('URL không tồn tại khác với task chưa tồn tại; app chính chưa có route ghi', async (t) => {
+test('URL không tồn tại khác với task chưa tồn tại', async (t) => {
   const { app } = validationApp();
   const request = await serve(t, app);
   const missingTask = await request('/missing-task');
   assert.equal(missingTask.status, 404);
   assert.deepEqual(await missingTask.json(), { code: 'TASK_NOT_FOUND', message: 'Task not found', taskId: body.id });
   const production = await serve(t, createApp());
-  for (const [path, method] of [['/typo', 'GET'], ['/api/v1/tasks', 'POST']]) {
+  for (const [path, method] of [['/typo', 'GET']]) {
     const response = await production(path, { method });
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { code: 'ROUTE_NOT_FOUND', message: 'Route not found' });

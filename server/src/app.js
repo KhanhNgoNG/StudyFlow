@@ -6,6 +6,8 @@ import { createErrorHandler, routeNotFound } from './middleware/error-handler.js
 import { createHealthRepository } from './repositories/health-repository.js';
 import { createTaskRepository } from './repositories/task-repository.js';
 import { createReadRouter } from './routes/read-routes.js';
+import { createWriteRouter } from './routes/write-routes.js';
+import { createTaskMutationService } from './services/task-mutation-service.js';
 
 export function createApp({ database, logger = console } = {}) {
   const app = express();
@@ -16,12 +18,20 @@ export function createApp({ database, logger = console } = {}) {
   app.set('query parser', (query) => parseQuery(query, '&', '=', { maxKeys: 0 }));
 
   // Valid JSON with the wrong root type belongs to semantic validation (422).
-  app.use(express.json({ strict: false }));
+  app.use(express.json({
+    strict: false,
+    verify(req, res, bytes) { res.locals.jsonBodyLength = bytes.length; },
+  }));
 
+  const taskController = createTaskController({
+    taskRepository: createTaskRepository(database),
+    taskMutationService: createTaskMutationService(database),
+  });
   app.use('/api/v1', createReadRouter({
     healthController: createHealthController({ healthRepository: createHealthRepository(database), logger }),
-    taskController: createTaskController({ taskRepository: createTaskRepository(database) }),
+    taskController,
   }));
+  app.use('/api/v1', createWriteRouter({ taskController }));
 
   app.use(routeNotFound);
   app.use(createErrorHandler({ logger }));

@@ -296,13 +296,12 @@ test('health chỉ 200 khi database/schema sẵn sàng; không database/thiếu 
   assert.equal(await unavailable.text(), '');
 });
 
-test('route HTTP không tồn tại và các method ghi chưa triển khai trả ROUTE_NOT_FOUND, không đổi dữ liệu', async (t) => {
+test('route HTTP không tồn tại trả ROUTE_NOT_FOUND và không đổi dữ liệu', async (t) => {
   const db = setup(t, tasks);
   const { request } = await serve(t, db);
   const before = snapshot(db);
   for (const [method, path] of [
-    ['GET', '/api/v1/not-an-endpoint'], ['POST', '/api/v1/tasks'],
-    ['PUT', `/api/v1/tasks/${tasks[0].id}`], ['DELETE', `/api/v1/tasks/${tasks[0].id}?baseVersion=1`],
+    ['GET', '/api/v1/not-an-endpoint'], ['GET', `/api/v1/tasks/${tasks[0].id}/not-an-endpoint`],
   ]) {
     const response = await request(path, { method });
     assert.equal(response.status, 404);

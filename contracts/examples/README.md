@@ -32,4 +32,6 @@ Các file task và tombstone thuần là object để tái sử dụng. Khi gi�
 
 Quyết định Bước 6 ngày 29/10/2026: GET danh sách không truyền includeDeleted có cùng hành vi với true, trả cả task sống và tombstone; false chỉ trả task sống. `task-list.json` minh họa kết quả của true hoặc khi không truyền tham số. Giá trị sai hoặc query includeDeleted lặp trả 422 VALIDATION_ERROR với fieldErrors.includeDeleted; cấu trúc lỗi dùng cùng schema như `error-response.json`. Android vẫn gửi rõ includeDeleted=true khi đồng bộ.
 
+Quyết định Bước 8 ngày 29/10/2026: DELETE bằng mutation mới trên tombstone có baseVersion khớp trả 200 với tombstone nguyên trạng và ghi receipt mới; không tăng version/đổi serverUpdatedAt. `delete-task-response.json` cũng có thể là snapshot cho trường hợp task đã ở tombstone version 3 trước request này. Nếu task được phục hồi/sửa tiếp, retry vẫn trả snapshot tombstone đã lưu và không xóa lại. Version cũ vẫn trả VERSION_CONFLICT với currentTask đầy đủ; ID chưa tồn tại trả TASK_NOT_FOUND.
+
 Không tạo JSON request cho DELETE vì hợp đồng không yêu cầu body. Không thêm response health hoặc mã lỗi khác khi chưa có cấu trúc JSON được hợp đồng quy định.

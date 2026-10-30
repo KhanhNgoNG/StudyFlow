@@ -477,21 +477,26 @@ paths:
       description: >
         Xóa logic khi baseVersion khớp phiên bản hiện tại.
         Không có request body.
-        Giữ ID và các trường nghiệp vụ, đặt isDeleted=true,
-        tăng version và cập nhật thời gian server.
+        Nếu task đang sống: giữ ID và các trường nghiệp vụ,
+        đặt isDeleted=true, tăng version và cập nhật thời gian server.
+        Nếu task đã là tombstone và baseVersion khớp: thành công không đổi
+        nội dung, version hoặc serverUpdatedAt, nhưng vẫn ghi receipt mới.
+        Quyết định này được người dùng xác nhận tại Bước 8 ngày 29/10/2026.
+        ID chưa tồn tại trả 404; version cũ trả 409 với currentTask đầy đủ,
+        kể cả task là tombstone.
         Không xóa vật lý trong giai đoạn demo.
         Server kiểm tra receipt trước version.
         Kiểm tra version, ghi task và receipt thành công
         được thực hiện nguyên tử.
-        Retry mutation thành công trả lại status/body đã lưu
-        và không tăng version lần nữa.
+        Retry mutation thành công trả lại status/body đã lưu,
+        không tăng version hoặc xóa lại task, kể cả task đã được phục hồi sau đó.
       parameters:
         - $ref: '#/components/parameters/TaskId'
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/DeleteBaseVersion'
       responses:
         '200':
-          description: Xóa logic thành công, trả task tombstone.
+          description: Xóa logic hoặc xác nhận tombstone hiện tại thành công, trả task tombstone.
           content:
             application/json:
               schema:
