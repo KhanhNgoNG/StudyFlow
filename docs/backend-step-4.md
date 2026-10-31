@@ -1,5 +1,7 @@
 # Hướng dẫn Bước 4 của backend StudyFlow
 
+> Tài liệu lịch sử mốc database Bước 4. Hiện đã có validation, API đọc/ghi và receipt ở Bước 5–10; xem [README server](../server/README.md) để chạy/bàn giao hiện tại. Các giới hạn “bước sau” dưới đây chỉ mô tả mốc Bước 4.
+
 ## Mục tiêu và trạng thái
 
 Bước 4 tạo nền tảng database thật cho server: kết nối SQLite, schema tasks và mutation_receipts, migration, seed và kiểm thử tính bền vững/transaction. Mã tương ứng đã được triển khai trong repo; các lệnh dưới đây chạy trực tiếp, không phải đoạn minh họa cần tự hoàn thiện.
@@ -22,7 +24,7 @@ Node phải phù hợp `>=22.14.0 <23`. `better-sqlite3` đã được thêm và
 
 ## 2 Kiểm tra cấu hình database
 
-Nếu chưa có `.env`, sao chép `.env.example` bằng `cp .env.example .env`. Nếu đã có, giữ file và kiểm tra các giá trị:
+Tạo `.env` nếu thiếu bằng `if [ ! -f .env ]; then cp .env.example .env; fi`. Nếu đã có, giữ file và kiểm tra các giá trị:
 
 ```dotenv
 NODE_ENV=development
@@ -81,7 +83,7 @@ Lần đầu trên database rỗng, kết quả mong đợi là `Đã thêm 3 ta
 
 UUID và timestamp cố định để các lần kiểm thử có cùng điểm xuất phát. Timestamp trong seed là dữ liệu minh họa; không phải bằng chứng một thao tác đã xảy ra ngoài thực tế. Không tạo receipt thành công giả cho seed vì seed không phải mutation HTTP.
 
-Chạy lại `npm run db:seed`: nếu đủ các ID seed đã tồn tại thì báo bỏ qua và không thay đổi dữ liệu, kể cả bạn đã sửa chúng sau seed. Nếu database có dữ liệu khác hoặc chỉ còn một phần bộ seed, lệnh từ chối để tránh trộn bộ dữ liệu. Không tự xóa database để vượt qua cảnh báo này.
+Chạy lại `npm run db:seed`: nếu đủ các ID seed đã tồn tại thì báo bỏ qua và không thay đổi dữ liệu, kể cả bạn đã sửa chúng sau seed. Nếu database đã có dữ liệu và thiếu ít nhất một ID seed, lệnh từ chối; nếu đủ các ID seed thì bỏ qua kể cả có thêm task khác. Không tự xóa database để vượt qua cảnh báo này.
 
 ## 6 Xem dữ liệu và kiểm tra tính toàn vẹn
 

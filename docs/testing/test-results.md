@@ -138,3 +138,166 @@ Không lưu log cá nhân, evidence hoặc database runtime vào Git. Không sta
 Đã kiểm chứng backend độc lập trên loopback, process riêng và SQLite tạm. Không benchmark/stress, không ép mất điện hoặc crash giữa COMMIT. Timeout-before-commit được tạo trước dispatch, không chứng minh khả năng hủy một transaction SQLite đang chạy. Proxy làm mất response sau khi upstream đã gửi đủ, không mô phỏng mọi lỗi mạng có thể xảy ra. Log là best effort, không thay receipt hoặc bảo đảm delivery.
 
 Không chạy Android/hai thiết bị trong Bước 10; Room, WorkManager, SyncEngine và hội tụ thực tế thuộc phần ghép thử Bước 11. OpenAPI vẫn được kiểm tra subset như Bước 9, không có kết quả mới từ validator chuyên dụng. Không tự triển khai Bước 11.
+
+## Bước 11 — bàn giao đã chuẩn bị, ghép Android chưa chạy (30/10/2026)
+
+Lượt này bắt đầu ở `da465da`, nhánh `codex/backend-api-contract`, working tree sạch. Chỉ cập nhật tài liệu hiện có; không đổi code/config Android, backend production, dependency hoặc hợp đồng. [Setup](../setup.md) đã thay nội dung scaffold cũ bằng lệnh thực tế và danh sách bàn giao cho A.
+
+### Môi trường và đường chạy đã kiểm tra
+
+| Nội dung | Quan sát thực tế |
+|---|---|
+| Backend | Node v22.14.0, npm 11.6.4; Express 5.3.0, better-sqlite3 12.11.1 theo dependency/lock hiện có |
+| Profile có trước | `.env` đang trỏ HOST=0.0.0.0/PORT=3000/DATABASE_PATH=./storage/studyflow.db; DB có trên máy, không mở ghi/reset/seed trong lượt này |
+| Listener | Lúc kiểm kê không có listener 3000/3001; không dừng server của người dùng |
+| Java/SDK/Wrapper | JDK mặc định Temurin 21.0.4; Android Studio JBR 25.0.3; `./gradlew --offline --no-daemon -Dorg.gradle.java.installations.auto-download=false --version` với JAVA_HOME JBR trả Gradle 9.6.0, criteria JetBrains Java 25; SDK Platform 37.0, Build Tools 36.0.0 có sẵn |
+| Thiết bị | ADB devices sau khi có quyền localhost trả danh sách rỗng. Emulator `-list-avds` có `Small_Phone`, chưa chạy; không có hai app storage được xác minh độc lập |
+| Android runtime | Không build/cài/chạy app hoặc instrumentation trong lượt này. Chỉ kiểm kê toolchain và đọc mã; không lấy số 82 unit/23 Room mốc cũ làm kết quả mới |
+
+ADB và Wrapper ban đầu bị sandbox chặn kết nối localhost/ghi lock cache. Đã dùng cơ chế cấp quyền và chạy lại đúng lệnh: ADB thực sự không có device, Wrapper version exit 0. Không tải JDK/Gradle/SDK/emulator, không sửa local.properties, không cài đè hoặc pm clear app.
+
+### Kiểm tra backend độc lập đã chạy
+
+1. `cd server && npm test -- --test-reporter=tap`: **155 tests, 155 pass, 0 fail/skipped/cancelled/todo, exit 0**. Gồm contract subset/fixture, concurrency Worker, persistence/replay và năm scenario runner Bước 10; không phải Android.
+2. `cd server && npm run test:smoke`: **11/11 request đạt, exit 0**. Tiến trình `src/server.js` riêng, port động/DB tạm, GET/health/validation/tombstone; DB không đổi và được dọn.
+3. Tái sử dụng chuỗi kiểm tra cURL Bước 8 dưới dạng công cụ tạm ngoài repo, đổi sang HOST=0.0.0.0, port 3001 đang trống, DB mới chỉ migrate và UUID task `00000000-0000-4000-8000-000000011001`. **15 request HTTP thật đạt** qua `src/server.js`:
+
+| Thao tác | Kết quả quan sát |
+|---|---|
+| Host GET health | 200, body rỗng |
+| POST và GET | 201/200, cùng UUID, version 1 |
+| PUT rồi PUT version cũ bằng mutation mới | 200/version 2; 409 VERSION_CONFLICT có currentTask đầy đủ |
+| DELETE baseVersion 2 rồi GET | 200/tombstone version 3, nội dung giữ nguyên |
+| Retry POST/DELETE cũ | 201/version 1 và 200/tombstone version 3 từ receipt |
+| DELETE key mới/baseVersion 3 trên tombstone | 200, giữ version/timestamp/nội dung, receipt mới |
+| PUT phục hồi baseVersion 3 | 200/task sống version 4 |
+| Retry DELETE no-op cũ sau phục hồi | 200/snapshot tombstone version 3, không xóa lại task hiện tại |
+| GET detail/list includeDeleted=true; DELETE mới version cũ | GET giữ task sống version 4; DELETE 409/currentTask version 4 |
+
+Các thao tác trên là **HTTP client trên host**, không phải thao tác người dùng trên Android. Không gắn nhãn A/B cho hai lần cURL. Đọc SQLite test read-only sau khi dừng server: một task sống version 4, năm receipt, integrity_check=ok. Server do công cụ tạo dừng bình thường exit 0, thư mục DB tạm đã xóa. Hash `.env`, DB demo và WAL có trước giữ nguyên; không đưa log/evidence/DB runtime vào Git. Dòng log request có cấu trúc đã được quan sát, nhưng receipt/response/state mới là assertion chính.
+
+### Audit Android và các điều kiện chưa đạt
+
+| Thành phần / bằng chứng đọc mã | Kết luận |
+|---|---|
+| `StudyFlowApplication.kt` chỉ tạo RoomTaskRepository | Chưa bind TaskApi/RoomSyncStore/SyncEngine vào app chính |
+| `sync/api/TaskApi.kt` là suspend interface/DTO; Gradle không có Retrofit/OkHttp | Chưa có client HTTP thật hoặc cấu hình base URL tập trung |
+| Fake ở `src/debug/.../StatefulFakeTaskApi.kt` và các test | Fake không phải network; không được gọi từ production Application/nút sync |
+| `SyncScreen.kt` Button enabled=false/onClick rỗng | Đồng bộ UI chưa chạy thật, không có kết quả manual sync A/B |
+| Scheduler/Worker/ConflictResolver là TODO; thiếu WorkManager dependency | Chưa có auto scheduling hoặc xác nhận lựa chọn conflict thật |
+| Main/debug manifest chưa có INTERNET/debug cleartext | Chưa cấu hình để app gọi HTTP local; không tự thêm quyền vào release trong nhiệm vụ docs này |
+| `validAcknowledgement()` luôn đòi baseVersion+1 | Chênh lệch với DELETE no-op matched đã chốt: server giữ version. Cần A sửa/test trước ghép; đây là kết luận từ mã, chưa phải failure trên thiết bị |
+| `TaskSnapshot.isValid()` dùng UTF-16 String.length | Chưa khớp code point backend ở biên emoji/title/description. Cần regression/đối chiếu Unicode phía A, không đổi hợp đồng |
+
+Các ca IT-A…IT-L về A → server → B, B không sửa, hai task khác nhau, offline/tombstone, chọn phiên bản, stale confirmation, hội tụ cùng nội dung, mất response của app, sửa trong lúc gửi và hội tụ Room **đều chưa chạy**. Lý do: không có adapter/binding thực và không có A/B. IT-02 health từ thiết bị cũng chưa chạy; host 200 không được nâng thành device/app 200.
+
+Không có truy vấn Room A/B, ảnh UI hoặc bằng chứng outbox thực từ thiết bị trong lượt này. Không suy ra Room giống server từ số lượng, ảnh hoặc fake test. Trạng thái ban đầu pending/conflict của A/B chưa thể đọc khi không có device. Ma trận expected/actual và yêu cầu bằng chứng nằm ở [test-cases](test-cases.md#bước-11-bàn-giao-và-ma-trận-ghép-hai-thiết-bị).
+
+### Bàn giao và giới hạn
+
+Đã chuẩn bị [lệnh server riêng/network/cleanup và nội dung cho A](../setup.md), liên kết OpenAPI/JSON, nhắc includeDeleted=true, DELETE no-op, receipt trước version và snapshot retry. Không nhắn sang chat khác/email/dịch vụ. Không tự viết thêm Android network stack, UI, WorkManager hoặc resolver vì đó là các thành phần còn thiếu của A.
+
+Bước 11 hoàn thành phần backend và chuẩn bị bàn giao có thể làm độc lập; **chưa hoàn thành ghép API thật với Android hoặc kiểm thử hai thiết bị**. Không benchmark, không chuyển Bước 12, không commit/push/merge/reset. Khi A có adapter/binding và hai storage test được phép, mới mở lại các ca tích hợp trong ma trận; không dùng công cụ Bước 10 trên server chung để thay bằng chứng của app.
+
+## Bước 13 — tái hiện và bàn giao backend (30/10/2026)
+
+### Nguồn mã và khả năng tái hiện
+
+Nhánh `codex/backend-api-contract`, HEAD nền `da465dafb84026cf6541177f89a65b5bf183568d`. Bước 9 đã nằm trong commit `c06732e`, Bước 10 trong `da465da`. Trước Bước 13 có năm Markdown Bước 11 chưa commit (server README, setup, demo, test-cases, test-results); đã sao lưu riêng trước chỉnh sửa và giữ nội dung/bằng chứng của chúng. Không giả định Bước 11 tích hợp hoặc Bước 12 đã hoàn tất: ma trận IT chưa chạy, measurements.csv chỉ header.
+
+Lượt này tạo **bản sao có kiểm soát** bằng archive HEAD rồi overlay các Markdown đang sửa, trong thư mục tạm ngoài repo, không có `.git`, node_modules, `.env` hay DB runtime ban đầu. Bao gồm thay đổi chưa commit của Bước 11/13, không gọi đây là tái hiện chỉ từ remote commit hiện tại. Các chỉnh sửa Markdown cuối để ghi kết quả được đồng bộ vào bản sao để kiểm link; không thay source/test/contract/lock trong repo. Hash **81 file** source, test, tooling, package/lock, `.env.example` và contracts trùng với bản sao sau thử; migration checksum cũng được phục hồi đúng sau probe có chủ ý.
+
+| Môi trường lượt sạch | Quan sát |
+|---|---|
+| Nền tảng | macOS / darwin arm64 |
+| Runtime | Node v22.14.0, npm 11.6.4 |
+| `npm ls --depth=0` | Express 5.3.0, better-sqlite3 12.11.1, yaml 2.9.1 |
+| SQLite từ native driver cài mới | 3.53.2; nạp/chạy truy vấn được |
+| Profile riêng | NODE_ENV=test, HOST=127.0.0.1, PORT=49209 được cấp khi trống, DATABASE_PATH tương đối dưới storage của **bản sao**; không sửa profile máy làm việc |
+| Database mới | Migrate 001_initial.sql; seed 3 task (1 tombstone), 0 receipt; inspect integrity=ok |
+| Chạy lại migrate/seed | Không thêm migration/task/receipt hoặc đổi dữ liệu; checksum `c2e9d6aa836be0cf3c08fcf5ef513c929e28eb942e17971aace9891f69e3d645` |
+
+Các lệnh thực hiện trong `server/` của bản sao, theo README (seed ở đây được chọn để kiểm dữ liệu mẫu):
+
+```bash
+npm ci --no-audit --no-fund --fetch-retries=0 --fetch-timeout=20000
+if [ ! -f .env ]; then cp .env.example .env; fi
+# Profile của bản sao được chỉnh sang loopback/cổng trống/DB mới như bảng trên.
+npm run db:migrate
+npm run db:seed
+npm run db:inspect
+npm run db:migrate
+npm run db:seed
+npm start
+# Sau khi dừng đúng server của lượt này:
+npm test -- --test-reporter=tap
+npm run test:smoke
+npm run test:faults
+npm ls --depth=0
+```
+
+`npm ci` thực sự cài mới **101 package**, không mang node_modules từ workspace sang, exit 0. Có warning upstream `prebuild-install@7.1.3` deprecated; không đổi dependency/lockfile để xóa warning. Guard `.env` được thử cả khi thiếu (chép đúng mẫu) và khi đã có (giữ nguyên bytes). Profile chạy HTTP là cấu hình riêng từ các biến mẫu, không phải cấu hình cá nhân/DB demo.
+
+### Kết quả đã chạy mới
+
+| Kiểm tra | Kết quả |
+|---|---|
+| Toàn bộ test backend | **155/155 pass**, fail/cancelled/skipped/todo 0, exit 0 |
+| Smoke entrypoint thật | **11/11 HTTP request đạt**, DB không đổi; child riêng dừng, exit 0 |
+| CLI lỗi Bước 10 | **5/5 scenario pass**, exit 0; `childrenStopped`, `proxyClosed`, `connectionsClosed`, `directoryRemoved` đều true |
+| HTTP trên `npm start` với DB vừa seed | **25 request có assertion đạt**, đủ sáu endpoint; JSON có Content-Type UTF-8, health body rỗng |
+| Đối chiếu HTTP với OpenAPI hiện có | **25/25 response khớp evaluator subset**, 51 local refs, 12 external example occurrence; toàn bộ 13 JSON fixture được kiểm trong suite |
+| Guard/vận hành | Sáu ca từ chối đúng: thiếu env, PORT=0, DB chưa có, schema trống, cổng do checker giữ, migration đã chạy bị sửa |
+| Dừng server | Gửi SIGINT cho process group chỉ thuộc lượt thử; npm wrapper exit -2 (bị ngắt như Ctrl+C), listener đóng; không coi wrapper bị ngắt là exit 0 |
+
+Không có validator OpenAPI chuyên dụng trong dependency hiện có; `yaml` là parser, helper kiểm một tập keyword/format. Không cài thêm validator/framework hoặc gọi kiểm tra subset là chứng nhận toàn bộ OpenAPI/JSON Schema/RFC. Ba race dùng hai Worker/SQLite connection tranh khóa thật rồi retry vẫn nằm trong 155 test; restart hai process là kiểm persistence tuần tự, không gọi là đồng thời. Không đo benchmark hoặc stress.
+
+Task HTTP riêng: `00000000-0000-4000-8000-000000013001`, không trùng seed. Các mutation key đuôi 013010…013018 giúp theo dõi response/receipt:
+
+| Nhóm request thực | Quan sát |
+|---|---|
+| Health, list thiếu query/true/false | Health 200 rỗng; list mặc định bằng true có 3 task, false có 2 task sống |
+| Query sai/lặp, ID sai/chưa tồn tại | 422 fieldErrors hoặc 404 TASK_NOT_FOUND đúng; không có success receipt |
+| POST mới, GET, retry POST | 201/version 1, GET cùng task; retry trả snapshot cũ |
+| Cùng key đổi request / POST key mới trùng UUID | 409 MUTATION_ID_REUSED / 409 VERSION_CONFLICT với currentTask đầy đủ |
+| POST boolean dạng chuỗi | 422 VALIDATION_ERROR, không tạo task/receipt |
+| PUT mới và PUT stale | 200/version 2, sau đó 409/currentTask version 2 |
+| DELETE sống, GET tombstone, DELETE key mới matched và retry | 200/tombstone version 3; no-op giữ toàn bộ task/time/version, receipt mới; retry không thêm receipt hoặc đổi DB |
+| DELETE tombstone stale | 409/currentTask đầy đủ version 3 |
+| PUT phục hồi, retry no-op DELETE và POST cũ, GET | Sống version 4; receipt trả tombstone version 3 hoặc POST version 1 như cũ; task hiện tại không bị xóa/ghi đè |
+
+Cuối chuỗi: **4 task = 3 seed + 1 task sống version 4; 5 success receipt; integrity=ok**. So toàn bộ hàng task/receipt/migration trước và sau các replay, không chỉ đếm version hoặc tin log. Inspect cuối đọc thật từ DB bản sao. CLI fault cuối `lost-response` cũng quan sát replay snapshot v1 trong khi currentTask v2, receipt count không đổi.
+
+Các lỗi khởi động đều thử ở bản sao/DB/cổng do checker sở hữu. Checksum probe chỉ thêm comment tạm vào migration của bản sao, lệnh migrate bị từ chối; file được trả lại đúng bytes và state DB không đổi. Không dùng/reset/sửa DB demo, không đổi source production để làm test đạt.
+
+### Lỗi môi trường/công cụ và giới hạn bằng chứng
+
+Lần npm ci sandbox đầu báo `Exit handler never called` và không ghi được cache npm; đã cấp quyền rồi chạy lại hoàn tất. Lần mở socket đầu bị EPERM; đã cấp quyền localhost và chạy thật, không skip. Checker tạm ban đầu gặp lỗi đọc bằng SQLite của Python; lượt cuối đọc read-only bằng đúng better-sqlite3 của dự án. Checker còn sửa giả định sai rằng npm wrapper sau SIGINT luôn exit 0 và chuyển probe cổng bận sang socket mới do nó sở hữu, tránh TIME_WAIT của cổng vừa đóng. Các lượt checker chưa hoàn tất không được ghi thành pass; lượt cuối hoàn tất cả HTTP, vận hành và cleanup, không sửa production.
+
+Checker, log, config, node_modules và DB của bản sao là tài nguyên tạm ngoài repo, không là artifact nộp. Lệnh tái hiện được lưu cho người nhận là README và các test/tool trong Git; không yêu cầu chạy lại script `/private/tmp` của phiên làm việc. Hash `.env` cùng DB/WAL/SHM có trước ở workspace được so lại sau lượt thử; không thay đổi. Không chạm Android hoặc tạo Word/PDF/báo cáo cuối mới, không stage/commit/push/merge/reset.
+
+Backend đã được kiểm độc lập trên môi trường trên và có đủ hướng dẫn để bàn giao local. Chưa có xác nhận Windows/Linux/public deploy/HTTPS, validator đầy đủ, mất điện/crash trong COMMIT, Android thật/hai thiết bị, D7 hoặc APK/video cuối. Bảng [D1–D8](../report/outline.md#7-đối-chiếu-d1d8-và-phân-công) phân rõ phần A/B/cả nhóm. Các kết quả backend không được nâng thành toàn dự án hoàn tất.
+
+Kiểm tra tài liệu cuối: **16 Markdown thay đổi, 156 liên kết tương đối/anchor được kiểm, không có link hỏng**; các command npm đối chiếu package scripts. Swagger CLI/Redocly/Spectral/OpenAPI generator không có trong PATH; dependency hiện có không cung cấp validator chuyên dụng. Các file nguồn/lock/migration/seed/contract/test cần thiết được Git theo dõi. `git diff --check` đạt, index không có file staged, không thêm file runtime/secret/dependency hoặc sửa Android. Bản sao cài mới và tài nguyên runtime riêng được dọn sau kiểm tra; tài liệu Bước 11 có trước được giữ và cập nhật trong cùng phạm vi Markdown.
+
+## Đối chiếu TC01–TC09 trước commit Bước 12/13 (31/10/2026)
+
+Không tìm thấy bộ dữ liệu thực nghiệm Bước 12 trong thay đổi hoặc lịch sử hiện có; `measurements.csv` vẫn chỉ có header, không có raw data để tổng hợp. Không tạo số liệu, thống kê, tỷ lệ thành công hoặc kết luận hội tụ thay thế. Không chạy benchmark chỉ để tạo commit. Các kết quả Bước 9–11/13 ở trên thuộc backend độc lập hoặc công cụ test; kết quả fake/Room cũ phía Android có phạm vi riêng ở [sync-engine-phase5-results](sync-engine-phase5-results.md).
+
+Bảng dưới đối chiếu tên ca trong [đặc tả dự án đã có](../../StudyFlow_Dac_ta_va_ke_hoach_du_an.docx), không xác nhận đã đọc PDF đề gốc. Trạng thái là **nghiệm thu toàn ca Android/tích hợp**: chưa có bằng chứng chạy đầy đủ TC01–TC09 trong Bước 12, nên không đánh dấu pass hoặc fail toàn ca từ kết quả backend.
+
+| Ca | Mục tiêu | Trạng thái toàn ca / bằng chứng giới hạn hiện có |
+|---|---|---|
+| TC01 | Online tạo trên A, server nhận, B nhận cùng ID | Chưa chạy tích hợp A/server/B; POST/GET backend đã đạt riêng, không chứng minh app đồng bộ |
+| TC02 | Offline tạo/sửa, Room/UI/pending bền sau mở lại | Chưa chạy nghiệm thu Bước 12; test fake/Room lịch sử không được nâng thành tích hợp API thật |
+| TC03 | Khôi phục mạng tự gửi, tách độ trễ scheduler | Chưa chạy/chưa đo; scheduler/worker/binding chưa hoàn thiện theo audit Bước 11 |
+| TC04 | Đóng/mở app giữ dữ liệu/outbox và tiếp tục tác vụ | Chưa chạy nghiệm thu trên app; restart backend chỉ chứng minh receipt/task server bền, không phải outbox hoặc force stop Android |
+| TC05 | Server ngừng/timeout, giữ thay đổi và retry đúng mutation | Chưa chạy đầy đủ từ app; năm fault scenario backend đạt riêng, không chứng minh UI/outbox/WorkManager |
+| TC06 | Retry cùng mutation không tạo trùng hoặc tăng version lại | Chưa chạy từ app thật; backend đã kiểm receipt/replay/version và một lần áp dụng, retry không được đếm thành mutation mới |
+| TC07 | A/B sửa cùng task, chọn bản và hội tụ | Chưa chạy hai thiết bị/resolver; 409/currentTask backend đạt riêng, không chứng minh lựa chọn hoặc hội tụ Room |
+| TC08 | Xóa offline truyền tombstone sang B, không xuất hiện lại | Chưa chạy offline A/B; backend đã kiểm tombstone/no-op/restore/replay theo hợp đồng |
+| TC09 | Nhiều bản ghi: thời gian, thành công, trùng và không nhất quán | Chưa chạy/chưa đo; không có dataset/kích thước/lần lặp/đơn vị/raw data thực nghiệm, không điền 0 |
+
+Chưa có số đo API/SyncEngine/chờ WorkManager để cộng hoặc so sánh; duration chẩn đoán trong log không thay dữ liệu thực nghiệm. Những khẳng định version/không áp dụng trùng ở đây chỉ dựa trên assertion SQLite/HTTP của backend, chưa là bằng chứng hội tụ toàn hệ thống. D7, tích hợp API thật hai thiết bị và artifact APK/video/báo cáo cuối vẫn còn thiếu như bảng D1–D8. Commit tài liệu lưu đúng trạng thái này, không phải commit kết quả thực nghiệm Bước 12 đã hoàn tất.
+
+Kiểm tra trước commit ngày 31/10/2026: `cd server` rồi `node --test tests/openapi.test.js` chạy mới **5/5 đạt**, fail/skipped/cancelled 0, gồm YAML/refs/13 JSON mẫu và HTTP production với DB tạm. Kiểm tra **159 liên kết tương đối/anchor**, syntax **52 block shell** bằng `bash -n`, parse **15 JSON** (package/lock và 13 fixture) đều đạt; npm scripts được đối chiếu package.json, CSV đúng header và chưa có dữ liệu đo. `.env` cùng DB/WAL/SHM có trước giữ nguyên hash. Không có thay đổi production/test/dependency/contract/Android, nên không chạy lại toàn bộ 155 test hoặc benchmark trong lượt commit này; số 155/11/5/25 ở phần Bước 13 vẫn là bằng chứng ngày 30/10/2026.

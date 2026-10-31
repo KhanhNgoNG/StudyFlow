@@ -2,7 +2,7 @@
 
 ## Mục tiêu và phạm vi đã làm
 
-Bước này tạo các thành phần dùng lại để kiểm tra request, chuyển hàng SQLite thành task JSON, bọc response và xử lý lỗi Express. Riêng mốc Bước 5 không thêm dependency, SQL nghiệp vụ, migration hoặc endpoint task. Trong trạng thái hiện tại sau Bước 6, app chính đã có GET health/danh sách/chi tiết; POST/PUT/DELETE và service idempotency vẫn chưa triển khai. Xem [Bước 6](backend-step-6.md) về API đọc và kết quả rà soát mới nhất.
+Bước này tạo các thành phần dùng lại để kiểm tra request, chuyển hàng SQLite thành task JSON, bọc response và xử lý lỗi Express. Riêng mốc Bước 5 không thêm dependency, SQL nghiệp vụ, migration hoặc endpoint task. Ở thời điểm kết thúc Bước 6, app đã có GET health/danh sách/chi tiết, còn API ghi/idempotency chưa được xây. **Hiện trạng sau Bước 7–10 đã có đầy đủ POST/PUT/DELETE và executor receipt**; xem [README server](../server/README.md) và [kết quả hiện hành](testing/test-results.md). Nội dung/kiểm thử dưới đây giữ ngữ cảnh mốc Bước 5–6, không là danh sách chức năng còn thiếu hiện nay.
 
 Đã đọc [giao thức đồng bộ](../contracts/sync-protocol.md), [OpenAPI](../contracts/openapi.yaml), toàn bộ [JSON mẫu](../contracts/examples/README.md), [thiết kế database](database-design.md), README và mã server hiện tại trước khi sửa. Nhánh lúc bắt đầu: `codex/backend-api-contract`, working tree sạch. Không thay đổi Android hoặc các file hợp đồng đã chốt.
 

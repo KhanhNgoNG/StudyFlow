@@ -85,3 +85,47 @@ Các ca dưới đây dùng app production, migration thật và SQLite tạm. C
 | BE-24 | Assertion lỗi giữa lượt harness, CLI argument sai và production start/dev | Cleanup đúng child/proxy/DB/thư mục tạm kể cả failure; exit code khác 0 khi assertion lỗi; start/dev không import harness hoặc bật fault bằng header/query |
 
 Mỗi kịch bản có trạng thái trước/sau và assertion dựa trên SQLite/response, không chỉ dựa vào log “replay”. Công cụ không lưu evidence mặc định; JSON stdout nêu scenario, lỗi client, mutation/request ID, số task/receipt, version/time và kết quả kiểm chứng. Các duration dùng cho chẩn đoán, không phải benchmark.
+
+## Bước 11: bàn giao và ma trận ghép hai thiết bị
+
+Điều kiện/lệnh môi trường riêng ở [setup.md](../setup.md). Lượt 30/10/2026 chưa có HTTP adapter/binding thật hoặc hai thiết bị, nên các ca Android dưới đây là **đã thiết kế, chưa chạy**. Backend đã kiểm tra riêng không thay thế cột kết quả Android. Không tự tạo fixture trong Room hoặc sửa database để coi là thao tác người dùng.
+
+Điều kiện mở lượt: hai thiết bị/AVD với app storage riêng, variant debug thật đã nối API, cùng server/DB test mới, không pending/conflict cũ trên các task liên quan. Dùng tên task `B11-A`, `B11-B`… để nhận diện; UUID phải lấy từ task/outbox do app tạo và ghi lại, không đoán ID từ tên. Ghi rõ đồng bộ manual hay tự động; chỉ đánh giá WorkManager nếu đã triển khai và quan sát được.
+
+| Mã | Điều kiện ban đầu và thao tác dự kiến | Kết quả kỳ vọng / bằng chứng cần có | Kết quả Bước 11 này |
+|---|---|---|---|
+| IT-00 | Server riêng, DB migrate mới; host gọi health và CRUD bằng HTTP | Health 200 rỗng; UUID/version/tombstone/receipt đúng; log và đọc SQLite test | Đã chạy host: 15 cURL request + 11 smoke, đạt; không phải Android |
+| IT-01 | Kiểm kê client/variant và thiết bị | Adapter thật được bind, URL tập trung, INTERNET/debug HTTP phù hợp, hai storage độc lập | Đã audit: thiếu adapter/binding/config, ADB không có device; chưa đạt điều kiện mở lượt |
+| IT-02 | Health từ từng thiết bị trước khi dùng app | Host 200, browser/công cụ trên A/B truy cập được; app còn cần kiểm tra riêng permission và client | Chưa chạy: không có A/B; host health không chứng minh device health |
+| IT-A | A tạo `B11-A`, UI đọc Room; sync A, đọc API cùng UUID/version 1; sync B | A lưu cục bộ trước HTTP, server có receipt, B nhập cùng UUID/nội dung; Room/outbox/log riêng A/B | Chưa chạy: thiếu client/binding và hai thiết bị |
+| IT-B | A/B cùng task v1 sạch; chỉ A sửa, sync A rồi B | Server v2; B nhận bản mới, không conflict; so trường nghiệp vụ và metadata pending liên quan | Chưa chạy: cùng điều kiện IT-A |
+| IT-C | Hai task đã có trên A/B; A sửa task thứ nhất, B sửa task thứ hai rồi sync | Mỗi ID tăng version đúng, không conflict giữa ID khác nhau | Chưa chạy: cùng điều kiện IT-A |
+| IT-D | Chỉ A offline; tạo/sửa/hoàn thành task, đóng/mở app rồi nối lại mạng và sync | Dữ liệu cục bộ bền vững, pending còn khi offline; B nhận sau sync; ghi rõ manual, không hứa worker chạy ngay | Chưa chạy: client/scheduler chưa nối, không có thiết bị |
+| IT-E | A/B có task sống cùng version; A xóa offline rồi sync, B pull và sync thêm lần nữa | Server tombstone giữ nội dung; B không hiển thị sống, không tự xuất hiện lại; kiểm isDeleted trong dữ liệu, không chỉ dựa vào list vắng ID | Chưa chạy: cùng điều kiện IT-D |
+| IT-F | A/B cùng task/version, sửa độc lập; A sync trước, B sau; B chọn bản server | 409/currentTask đầy đủ; giữ hai snapshot; xác nhận đúng bản đã xem, không mất local trước quyết định | Chưa chạy: thiếu binding và resolver/UI ghi thật |
+| IT-G | Task riêng, xung đột tương tự IT-F; chọn bản thiết bị | PUT mới, mutation mới, baseVersion của bản đã xem; hai phía nhận bản được chấp nhận | Chưa chạy: thiếu resolver/UI ghi thật |
+| IT-H | Khi đang xem conflict, phía kia sửa server tiếp rồi xác nhận lựa chọn cũ | Precondition cũ không ghi đè bản server mới; hiển thị bản mới để xem lại | Chưa chạy: thiếu resolver và hai thiết bị |
+| IT-I | Hai phía sửa thành cùng nội dung; task khác cho xóa–sửa | Hội tụ không hỏi chọn không cần thiết; xóa–sửa theo lựa chọn toàn bộ, không tự gộp từng trường | Chưa chạy; logic fake/unit cũ không được tính là kết quả API thật |
+| IT-J | Client thật gửi snapshot, server commit nhưng app chưa nhận response trong môi trường lỗi riêng được phép | Outbox giữ nguyên method/path/query/body/mutation ID; request ID đổi; retry receipt không tăng version/time; đối chiếu app outbox + backend log/receipt | Chưa chạy: không có adapter/app binding; Bước 10 chỉ chứng minh backend |
+| IT-K | Gửi revision r, người dùng sửa tiếp r+1 trước response | ACK chỉ xác nhận r; không ghi đè hoặc đánh dấu sạch r+1; pending tiếp bằng mutation mới | Chưa chạy: không có đường gửi thật/UI binding |
+| IT-L | Mọi task liên quan đã hết pending/conflict | So tập ID, title/description/subjectCode/dueDate/priority/completed/isDeleted giữa Room A, Room B và API; không chỉ số lượng/UI | Chưa chạy: không có Room A/B để đọc; không suy ra từ ảnh UI |
+| IT-M | Trước adapter, đối chiếu ACK tombstone no-op và Unicode DTO | DELETE no-op baseVersion giữ nguyên phải ACK đúng; title/description đếm code point thống nhất, không từ chối valid pull | Đã phát hiện chênh lệch qua mã; bàn giao A thêm regression/sửa client, chưa chạy Android |
+
+Sau khi A hoàn thiện: mỗi ca ghi serial/variant, tên DB server riêng, UUID thực của task, baseVersion đầu, pending/conflict A/B, thao tác, expected/actual và nguồn bằng chứng. App/UI, HTTP, log server và truy vấn DB read-only là các nguồn khác nhau; không ghép chúng thành một bằng chứng giả.
+
+Không dùng `test:faults` như proxy chờ Android: công cụ đó tự tạo backend/DB/request và tự dọn, không có chế độ nhận mutation từ app. Không gây lỗi trên server dùng chung; chỉ mở ca IT-J sau khi xác định được phạm vi và công cụ phù hợp với client thật. Không reset server/Room A/B, cài đè hoặc pm clear nếu chưa có phép.
+
+## Bước 13 — kiểm tra khả năng bàn giao
+
+Các kiểm tra này chạy ngoài repo runtime, không thêm endpoint test vào app. [Kết quả thực tế](test-results.md#bước-13--tái-hiện-và-bàn-giao-backend-30102026) ghi lệnh, snapshot và trạng thái từng phần.
+
+| Mục | Cách kiểm / expected |
+|---|---|
+| Mã nguồn sạch có kiểm soát | Archive HEAD rồi overlay toàn bộ thay đổi tài liệu đang có; không sao chép `.env`, node_modules hoặc DB; ghi rõ tài liệu chưa commit |
+| Cài và cấu hình | npm ci theo lockfile, native driver nạp được; cấu hình từ mẫu cho loopback/cổng trống/DB mới; guard không chép đè `.env` đã có |
+| Migration/seed/inspect | Schema mới, ba task cố định (một tombstone), 0 receipt, integrity ok; migrate/seed chạy lại không đổi snapshot/checksum |
+| API chính và hợp đồng | Health/list/detail/POST/PUT/DELETE thực qua npm start; 404/409/422, currentTask đầy đủ, default/filter/query lặp; response được kiểm bằng evaluator OpenAPI hiện có |
+| Replay và xóa logic | POST v1 → PUT v2 → DELETE v3 → no-op v3 → phục hồi v4; retry snapshot POST/DELETE cũ không đổi state, không có receipt lỗi |
+| Test và công cụ lỗi | npm test đủ bộ, test:smoke, test:faults đủ năm scenario, cleanup tài nguyên riêng |
+| Lỗi vận hành | Thiếu env, PORT sai, DB/schema thiếu, cổng bận do checker giữ, checksum thay đổi trong bản sao: từ chối đúng, không sửa dữ liệu demo |
+| Kiểm kê bàn giao | Link/lệnh đúng file/script, source/lock/fixtures được theo dõi, diff không runtime/secret, D7 chưa đo vẫn chưa đo; Android/A/B/APK/video chưa được nâng thành pass |

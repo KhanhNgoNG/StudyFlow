@@ -1,5 +1,7 @@
 # Bước 6 backend: API đọc dữ liệu
 
+> Tài liệu lịch sử mốc API đọc Bước 6. API ghi/version/tombstone và idempotency đã được triển khai ở Bước 7–10; các câu “chưa triển khai” phía dưới chỉ mô tả thời điểm mốc này. Hiện trạng/cách chạy: [README server](../server/README.md); bằng chứng mới: [test-results](testing/test-results.md).
+
 ## Mục tiêu và phạm vi
 
 Đã triển khai GET `/api/v1/tasks`, GET `/api/v1/tasks/{id}` và hoàn thiện GET `/api/v1/health`. API đọc dùng SQLite thật và tái sử dụng validator, mapper/serializer, ApiError và error middleware Bước 5. Không thêm dependency, migration, service chuyển tiếp hoặc API phụ để ghi/reset dữ liệu.

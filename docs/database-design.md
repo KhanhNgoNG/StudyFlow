@@ -108,11 +108,11 @@ Reset được gọi rõ ràng bằng CLI với cờ xác nhận ở development
 
 ## Kiểm chứng
 
-`cd server && npm test` đã chạy thật **136/136 đạt**: 116 test Bước 4–7, 18 integration HTTP CRUD và 2 concurrency production service Bước 8. Không dùng database demo. Bao gồm rollback callback/INSERT receipt/COMMIT, persistence, receipt hỏng, HTTP mất phản hồi sau commit, no-op tombstone/replay sau phục hồi và version an toàn.
+Mốc Bước 8 đã chạy **136/136 đạt**; Bước 9 thêm test thành 147, Bước 10/11 là **155/155**, bao gồm rollback callback/INSERT receipt/COMMIT, persistence, receipt hỏng, HTTP mất phản hồi sau commit, no-op tombstone/replay sau phục hồi và version an toàn. Lượt tái hiện Bước 13 được ghi riêng ở [test-results](testing/test-results.md). Không dùng database demo; số test không phải số đo hiệu năng.
 
 Concurrency thực tế dùng hai Worker và hai connection trên file SQLite tạm WAL: writer giữ khóa bằng gate đồng bộ chỉ dành cho test, contender nhận SQLITE_BUSY trước commit và callback chưa chạy; sau khi writer commit, test cho contender retry cùng key, nhận replay và không gọi callback. Cuối cùng chỉ có một task/receipt, version 1. Đây là contention + retry thật; chưa phải stress test hoặc hai HTTP request ghi vào app chính. Production callback không chứa gate hoặc chờ network; parent test không bị chặn event loop.
 
-Hai ca Bước 8 còn dùng production service: TEMP trigger chỉ ở kết nối writer giữ gate khi UPDATE; contender thực sự nhận SQLITE_BUSY. Sau writer commit, contender retry: khác key/cùng baseVersion nhận 409 với currentTask version 2, cùng key/request nhận replay version 2. Mỗi ca có một task version 2 và hai receipt tổng cộng (POST ban đầu + một PUT). Không có trigger/gate này trong schema production.
+Hiện có **ba ca** dùng production service trong `task-write-concurrency.test.js`: TEMP trigger chỉ ở kết nối writer giữ gate khi UPDATE; contender thực sự nhận SQLITE_BUSY. Sau writer commit, contender retry: khác key/cùng baseVersion nhận 409 với currentTask version 2; cùng key/request nhận replay version 2; cùng key/khác payload nhận MUTATION_ID_REUSED trước conflict version. Mỗi ca có một task version 2 và hai receipt tổng cộng (POST ban đầu + một PUT). Không có trigger/gate này trong schema production; không gọi đây là stress HTTP.
 
 Đã chạy tiến trình server thật với database tạm bằng cURL: 15 request, version 1 → 2 → 3, stale 409, replay cũ, no-op tombstone và phục hồi version 4. Kết thúc có một task sống version 4, năm receipt, integrity ok; server và thư mục tạm đã được dọn. Xem lệnh cURL đầy đủ trong README server.
 

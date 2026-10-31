@@ -2,10 +2,14 @@
 
 Backend của StudyFlow sử dụng Node.js, JavaScript ES modules, Express 5 và SQLite qua `better-sqlite3`. Health, API đọc và POST/PUT/DELETE task đã hoạt động trong app chính. API ghi dùng lại executor mutation/receipt của Bước 7, không có luồng idempotency thứ hai. Bước 9 bổ sung integration test; Bước 10 thêm log request/mutation và công cụ tái hiện lỗi riêng. Hợp đồng chung với Android nằm trong [giao thức đồng bộ](../contracts/sync-protocol.md) và [OpenAPI](../contracts/openapi.yaml). Các hướng dẫn [Bước 4](../docs/backend-step-4.md), [Bước 5](../docs/backend-step-5.md), [Bước 6](../docs/backend-step-6.md) ghi lại từng mốc trước; xem [thiết kế database](../docs/database-design.md), [ca kiểm thử](../docs/testing/test-cases.md) và [kết quả thực tế](../docs/testing/test-results.md) về hiện trạng.
 
+Bước 11 đã chuẩn bị [gói bàn giao và lệnh chạy môi trường riêng](../docs/setup.md). Backend kiểm tra độc lập đạt; **chưa ghép Android thật hoặc hai thiết bị** vì app còn thiếu adapter mạng/binding, scheduler/worker và xác nhận xung đột. Lượt kiểm kê Bước 11 không có thiết bị ADB. Fake chỉ thuộc debug/test, app chính vẫn dùng Room cục bộ. Không đổi API/Android hoặc tự triển khai phần còn thiếu để ghi kết quả tích hợp.
+
 ## Yêu cầu môi trường
 
 - Node.js `>=22.14.0 <23`, theo `package.json`.
-- npm đi kèm Node.js để cài dependency từ `package-lock.json`.
+- Lượt bàn giao kiểm tra Node `22.14.0`, npm `11.6.4` trên macOS arm64; chưa xác minh Windows/Linux hoặc Node major khác.
+- Lockfile hiện cài Express `5.3.0`, better-sqlite3 `12.11.1`, yaml `2.9.1` (chỉ dev/test). SQLite đi kèm native module; phiên bản engine của lượt sạch ghi trong [kết quả Bước 13](../docs/testing/test-results.md#bước-13--tái-hiện-và-bàn-giao-backend-30102026).
+- Cài cả dev dependency để chạy kiểm tra OpenAPI. `npm ci` cần package/lock khớp và native module tương thích; không chép `node_modules` từ máy khác. [Nguồn chính thức](../docs/references.md).
 
 Kiểm tra phiên bản:
 
@@ -15,6 +19,8 @@ npm --version
 ```
 
 ## Cài đặt
+
+Lấy mã theo [README gốc](../README.md). Các block có `cd server` bắt đầu từ thư mục gốc repository; nếu terminal đã ở `server/` thì bỏ dòng đó. Tài liệu lịch sử theo từng bước không thay hợp đồng hiện hành.
 
 Từ thư mục gốc repository:
 
@@ -26,7 +32,7 @@ npm ci
 Khi thiết lập lần đầu, tạo cấu hình local:
 
 ```bash
-cp .env.example .env
+if [ ! -f .env ]; then cp .env.example .env; fi
 ```
 
 Nếu đã có `.env`, giữ cấu hình hiện tại và chỉ bổ sung biến còn thiếu từ `.env.example`. Các lệnh chạy bên dưới được thực hiện trong thư mục `server/`.
@@ -52,7 +58,7 @@ npm run db:seed
 npm run db:inspect
 ```
 
-Migration có thể chạy lại; file migration đã chạy được kiểm tra checksum. Seed chỉ chèn vào database rỗng; nếu đủ các ID seed đã tồn tại thì bỏ qua, không ghi đè sửa đổi mới. Database có dữ liệu khác hoặc thiếu một phần bộ seed sẽ bị từ chối seed. Server không tự migrate hoặc seed khi khởi động.
+`db:seed` là tùy chọn, bỏ lệnh đó nếu muốn dataset rỗng. Migration có thể chạy lại; file migration đã chạy được kiểm tra checksum. Seed chỉ chèn khi cả tasks/receipts rỗng; nếu đủ ba ID seed đã tồn tại thì bỏ qua, kể cả có task khác, không ghi đè sửa đổi mới. Khi DB có dữ liệu nhưng thiếu ít nhất một ID seed thì từ chối seed, không tự sửa. Server không tự migrate hoặc seed khi khởi động. `db:inspect` chỉ đọc, in migration/task/receipt count và integrity; có thể chứa nội dung task, không gửi output DB đang dùng như log công khai.
 
 Chế độ phát triển, tự khởi động lại khi file JavaScript đang được sử dụng thay đổi:
 
@@ -79,6 +85,25 @@ curl -i http://localhost:3000/api/v1/health
 Kết quả mong đợi là HTTP `200 OK` với body rỗng. Server kiểm tra hai bảng nghiệp vụ trước khi mở port; health kiểm tra connection và khả năng truy vấn hai bảng, trả `503` rỗng nếu thiếu database, connection đóng hoặc schema không truy vấn được. Health không migrate/seed/reset và không chứng minh API ghi hoặc đồng bộ đã hoạt động.
 
 Nếu đổi `PORT`, thay cổng tương ứng trong URL.
+
+## Tra nhanh hợp đồng HTTP
+
+Base path `/api/v1`, JSON UTF-8 trừ health body rỗng. [OpenAPI](../contracts/openapi.yaml) là đặc tả parameter/header/schema/status chi tiết; [JSON mẫu](../contracts/examples/README.md) có request/response để dùng với cURL bên dưới.
+
+| Method / đường dẫn | Đầu vào chính | Thành công / lỗi nghiệp vụ |
+|---|---|---|
+| GET `/health` | Không | 200 rỗng, connection/schema lỗi 503 rỗng |
+| GET `/tasks` | `includeDeleted` thiếu/true/false, không lặp | 200 `{tasks:[...]}`; query sai 422 |
+| GET `/tasks/{id}` | UUID path | 200 `{task:...}` kể cả tombstone; 404 hoặc 422 |
+| POST `/tasks` | JSON đầy đủ, baseVersion=0, Idempotency-Key UUID | 201 `{task:...}` version 1; ID đã có 409 |
+| PUT `/tasks/{id}` | JSON đầy đủ, ID body=path, baseVersion>=1, key UUID | 200 `{task:...}`; task chưa tồn tại: 404, stale: 409 |
+| DELETE `/tasks/{id}` | Query baseVersion>=1, key UUID, không body | 200 `{task:...}` tombstone; task chưa tồn tại: 404, stale: 409 |
+
+Task gồm id/title/description/subjectCode/dueDate/priority/completed/isDeleted/version/serverUpdatedAt. Request POST/PUT gửi tám trường nghiệp vụ (gồm id) và baseVersion; version/serverUpdatedAt do server cấp. UUID dạng 8-4-4-4-12 hex, giữ case; không ép kiểu string/number/boolean. Title trim 1–120 Unicode code point; description 0–2.000, từ chối NUL/surrogate đơn. subjectCode: MOBILE/DATABASE/GENERAL/OTHER; priority: LOW/MEDIUM/HIGH; dueDate ngày thật YYYY-MM-DD hoặc null; completed/isDeleted là JSON boolean. BaseVersion/version thuộc miền số nguyên an toàn đến 9007199254740991.
+
+POST/PUT yêu cầu isDeleted=false; muốn xóa dùng DELETE, muốn phục hồi dùng PUT matched với false. DELETE baseVersion là chuỗi thập phân trên query, không lặp; thiếu/sai kiểu/ngoài miền 422 ở mutation mới. Không đưa baseVersion vào task response.
+
+422 `VALIDATION_ERROR` có fieldErrors; 409 `VERSION_CONFLICT` có currentTask đầy đủ và taskId; 409 `MUTATION_ID_REUSED` khi key đã dùng cho request khác. Route không có khác với TASK_NOT_FOUND. JSON hỏng 400, sai Content-Type có payload 415, body quá lớn 413, lỗi hạ tầng 500 kín. Các status hạ tầng/transport và schema chi tiết xem OpenAPI/tests; không hứa 429/rate limiter đã được triển khai chỉ vì hợp đồng có response dự phòng. Test hợp đồng không thay validator OpenAPI đầy đủ.
 
 ## API đọc công việc
 
@@ -209,7 +234,7 @@ Không cần `.env`, migrate hoặc seed database demo để chạy test. Test d
 
 Mốc Bước 9 ngày 30/10/2026 đã chạy **147/147 đạt**: giữ 136 test trước đó và thêm 11 ca có mục đích (4 HTTP validation/fingerprint/receipt hỏng, 1 restart/replay, 1 race cùng key khác request, 5 hợp đồng). Bước 10 giữ bộ này và thêm 5 test log + 3 test harness; lượt toàn bộ cuối đạt **155 pass, 0 fail, 0 skip, 0 cancel**. Không đổi framework hoặc dependency runtime; `yaml@2.9.1` là dev dependency đã thêm ở Bước 9, Bước 10 không thêm dependency.
 
-Lệnh chính là `npm test` sau `cd /Users/tuankhong/Documents/StudyFlow/server`. Máy mới dùng Node `>=22.14.0 <23` theo package và chạy `npm ci` một lần để cài cả devDependencies. Test không cần `.env`, không phụ thuộc database demo hay thứ tự chạy. Chạy riêng các nhóm khi cần chẩn đoán:
+Lệnh chính là `npm test` sau `cd server`. Máy mới dùng Node `>=22.14.0 <23` theo package và chạy `npm ci` một lần để cài cả devDependencies. Test không cần `.env`, không phụ thuộc database demo hay thứ tự chạy. Chạy riêng các nhóm khi cần chẩn đoán:
 
 ```bash
 node --test tests/request-fingerprint.test.js tests/mutation-executor.test.js tests/mutation-http.test.js
@@ -237,7 +262,7 @@ OpenAPI hiện được kiểm tra tự động trong `npm test`: YAML parse/kh�
 Chạy trực tiếp trong `server/` với các dependency đã cài (`npm ci` trên máy mới):
 
 ```bash
-cd /Users/tuankhong/Documents/StudyFlow/server
+cd server
 npm run test:faults
 ```
 
@@ -284,13 +309,23 @@ Không ghi title/description, toàn bộ body, headers/query, biến môi trư�
 
 Xem điều kiện/lệnh/xác minh/cleanup cho từng scenario trong [demo-script.md](../docs/demo/demo-script.md), các ca [BE-16…BE-24](../docs/testing/test-cases.md#các-ca-bước-10) và [kết quả đã chạy](../docs/testing/test-results.md). Chưa kiểm chứng Room, WorkManager, SyncEngine hay hai thiết bị Android.
 
+## Bàn giao API cho Android — Bước 11
+
+[docs/setup.md](../docs/setup.md) hiện chứa lệnh chính xác cho `npm ci`, tạo `.env` không ghi đè, migration/seed trên DB mới, server riêng HOST=0.0.0.0/PORT=3001, health/cURL, URL emulator/LAN và cleanup. Không dùng database demo cho lượt ghép. Host dùng `http://127.0.0.1:3001/api/v1/`; Android Emulator chuẩn dùng `http://10.0.2.2:3001/api/v1/`, điện thoại thật dùng LAN của laptop. Không dùng localhost Android để chỉ laptop.
+
+Gói hợp đồng gồm Sync Protocol, OpenAPI và JSON mẫu đã liên kết ở đầu README. Android phải gửi rõ includeDeleted=true dù default đã chốt true, UUID Idempotency-Key cho ghi, giữ toàn bộ snapshot khi retry. DELETE mới trên tombstone matched giữ version/time nhưng có receipt mới; retry luôn trả status/body đã lưu kể cả task hiện tại đổi tiếp. Log request ID khác nhau giữa các lần gửi; mutation ID giữ nguyên.
+
+Trước khi A nối client, cần xử lý các điểm được ghi cụ thể trong setup: chưa có HTTP adapter/base URL/permission debug; Application và nút sync chưa nối engine; scheduler/worker/resolver là TODO. Ngoài ra ACK DELETE no-op hiện bị điều kiện baseVersion+1 của Android loại, và bộ đếm chuỗi UTF-16 chưa khớp code point của backend. Đây là phát hiện qua đối chiếu mã, chưa phải lỗi quan sát trên thiết bị; không sửa hợp đồng để che chúng.
+
+Lượt Bước 11 đã chạy 155/155 backend test, smoke 11 request và 15 cURL request trên `src/server.js` thật với DB tạm/UUID riêng: CRUD, conflict, tombstone/no-op và replay sau phục hồi đúng. Đã dừng server do lượt thử tạo, dọn thư mục tạm; `.env` và DB demo không đổi. Chỉ là bằng chứng backend/host, chưa phải đường mạng từ thiết bị hoặc hội tụ Room. Các ca A/B, offline, conflict và retry app được đánh dấu chưa chạy trong [test-cases](../docs/testing/test-cases.md) và [test-results](../docs/testing/test-results.md); xem [thứ tự demo](../docs/demo/demo-script.md).
+
 ## Tái hiện chuỗi ghi bằng cURL với database tạm
 
 Terminal thứ nhất: tạo database riêng ngoài repo, chỉ migrate schema, không nạp/reset demo. Cổng 3001 phải đang trống; nếu server báo EADDRINUSE thì không dừng tiến trình khác.
 
 ```bash
-cd /Users/tuankhong/Documents/StudyFlow/server
-STUDYFLOW_STEP8_TMP="$(mktemp -d)"
+cd server
+STUDYFLOW_STEP8_TMP="$(mktemp -d /private/tmp/studyflow-curl.XXXXXX)"
 DATABASE_PATH="$STUDYFLOW_STEP8_TMP/studyflow.db" node --input-type=module -e 'import {openDatabase} from "./src/database/connection.js"; import {migrateDatabase} from "./src/database/migrate.js"; const db=openDatabase(process.env.DATABASE_PATH); migrateDatabase(db); db.close();'
 NODE_ENV=test HOST=127.0.0.1 PORT=3001 DATABASE_PATH="$STUDYFLOW_STEP8_TMP/studyflow.db" node src/server.js
 ```
@@ -298,7 +333,7 @@ NODE_ENV=test HOST=127.0.0.1 PORT=3001 DATABASE_PATH="$STUDYFLOW_STEP8_TMP/study
 Terminal thứ hai chạy đúng các UUID và JSON mẫu sau. Chỉ mutation mới đổi key; retry giữ nguyên key/payload/query. Cả hai terminal không cần đọc `.env` cho ví dụ này.
 
 ```bash
-cd /Users/tuankhong/Documents/StudyFlow/server
+cd server
 curl -i http://127.0.0.1:3001/api/v1/health
 curl -i -X POST http://127.0.0.1:3001/api/v1/tasks -H 'Content-Type: application/json' -H 'Idempotency-Key: 7fe7b179-6677-43ec-99e2-c0c035a184a8' --data-binary @../contracts/examples/create-task-request.json
 curl -i http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48a7cc401814
@@ -318,6 +353,17 @@ curl -i -X DELETE 'http://127.0.0.1:3001/api/v1/tasks/612954cb-842b-4d60-a0c8-48
 
 Kết quả lần lượt: 200, 201, 200, 200, 409, 200, 200, 201, 200, 200, 200, 200, 200, 200, 409. DELETE cuối dùng key mới và version cũ nên conflict; DELETE ngay sau phục hồi dùng key no-op cũ nên replay tombstone version 3, trong khi GET tiếp theo vẫn là task sống version 4. Dừng server tự chạy bằng Ctrl+C ở terminal thứ nhất. Dữ liệu ví dụ nằm trong thư mục tạm, không ở database demo của repo.
 
+Sau khi server đã dừng, vẫn ở Terminal thứ nhất/`server/`, đọc task và năm receipt rồi dọn đúng thư mục của chuỗi này (macOS):
+
+```bash
+DATABASE_PATH="$STUDYFLOW_STEP8_TMP/studyflow.db" node src/database/cli.js inspect
+DATABASE_PATH="$STUDYFLOW_STEP8_TMP/studyflow.db" node --input-type=module -e 'import {openDatabase} from "./src/database/connection.js"; const db=openDatabase(process.env.DATABASE_PATH,{readonly:true,fileMustExist:true}); console.table(db.prepare("SELECT mutation_id, method, response_status, response_body FROM mutation_receipts ORDER BY created_at, mutation_id").all()); db.close();'
+node --input-type=module -e 'import assert from "node:assert/strict"; import {rmSync} from "node:fs"; import path from "node:path"; const p=path.resolve(process.argv[1]); assert.equal(path.dirname(p),"/private/tmp"); assert.ok(path.basename(p).startsWith("studyflow-curl.")); rmSync(p,{recursive:true});' "$STUDYFLOW_STEP8_TMP"
+unset STUDYFLOW_STEP8_TMP
+```
+
+Chỉ dọn khi không còn dùng DB đó; không thay biến thư mục bằng `storage/` hoặc thư mục của người khác. Khi chạy lại toàn bộ chuỗi, tạo thư mục/DB mới để UUID/key fixture không đụng lượt trước.
+
 ## Reset dữ liệu demo
 
 Chỉ chạy sau khi dừng server và thống nhất reset cùng hai thiết bị. Lệnh sau xóa toàn bộ task và receipt trong database cấu hình, giữ schema và lịch sử migration:
@@ -332,11 +378,13 @@ Lệnh bị từ chối nếu thiếu cờ xác nhận hoặc `NODE_ENV` không 
 
 - Thiếu `.env`: tạo file từ `.env.example` theo hướng dẫn cài đặt.
 - `PORT` không hợp lệ: sửa thành số nguyên từ 1 đến 65535 rồi chạy lại.
-- Cổng đang được sử dụng (`EADDRINUSE`): dừng tiến trình server cũ hoặc chọn cổng khác trong `.env`.
+- Cổng đang được sử dụng (`EADDRINUSE`): chọn cổng trống khác trong `.env`; chỉ Ctrl+C server do chính bạn đang chạy. Không dừng listener của người khác.
 - Không tìm thấy Express: chạy `npm ci` trong `server/` và kiểm tra lại phiên bản Node.js.
 - Thiếu database hoặc schema: kiểm tra `DATABASE_PATH`, chạy `npm run db:migrate` rồi khởi động lại.
 - Migration đã chạy bị sửa: khôi phục nội dung migration gốc; thay đổi schema bằng file migration mới.
 - Lỗi native module `better-sqlite3`: kiểm tra phiên bản Node.js và chạy lại `npm ci` trên máy đang sử dụng, không sao chép `node_modules` từ máy khác.
+
+Các lỗi thiếu `.env`, PORT sai, cổng bận, schema thiếu và checksum bị sửa có kiểm tra cô lập trong lượt Bước 13 (xem test-results). Hướng xử lý dependency/native dựa trên script và tài liệu chính thức; không cố tình phá cài đặt hiện tại để thử mọi lỗi npm. Nếu npm ci bị chặn mạng/quyền, ghi đúng lỗi và xử lý quyền/mạng trước; không đổi lockfile hoặc reset DB để vượt lỗi.
 
 ## Quy tắc lưu Git
 
